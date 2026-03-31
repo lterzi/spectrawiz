@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "spectrawiz"
+version = "0.1.0"
+description = "Radar spectra explorer and simulator"
+authors = [
+    { name = "Your Name", email = "your@email.com" }
+]
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "streamlit",
+    "xarray",
+    "matplotlib",
+    "numpy",
+    "pandas",
+    "netcdf4",
+    "scipy"
+]
+
+[project.scripts]
+spectrawiz-explorer = "spectrawiz.explorer:main"
+spectrawiz-process = "spectrawiz.process_data:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

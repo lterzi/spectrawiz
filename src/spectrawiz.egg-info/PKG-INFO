@@ -1,0 +1,14 @@
+Metadata-Version: 2.4
+Name: spectrawiz
+Version: 0.1.0
+Summary: Radar spectra explorer and simulator
+Author-email: Your Name <your@email.com>
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+Requires-Dist: streamlit
+Requires-Dist: xarray
+Requires-Dist: matplotlib
+Requires-Dist: numpy
+Requires-Dist: pandas
+Requires-Dist: netcdf4
+Requires-Dist: scipy
