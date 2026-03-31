@@ -1,3 +1,0 @@
-[console_scripts]
-spectrawiz-explorer = spectrawiz.explorer:main
-spectrawiz-process = spectrawiz.process_data:main

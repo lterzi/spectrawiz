@@ -1,7 +1,0 @@
-streamlit
-xarray
-matplotlib
-numpy
-pandas
-netcdf4
-scipy
