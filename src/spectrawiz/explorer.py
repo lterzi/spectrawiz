@@ -12,6 +12,9 @@ import plotly.graph_objects as go
 #print('new version of explorer.py loaded')
 #print('Matplotlib/slider version of explorer.py loaded')
 def main():
+    print('###############################################################')
+    print('new version of explorer.py loaded')
+    print('###############################################################')
     st.set_page_config(layout="wide")
     st.title("SpectraWiz: Interactive Radar Spectra Visualization")
 
@@ -547,7 +550,7 @@ def main():
         vel, spectrum = load_spectrum(files, ds_mom, prof_time_idx, range_idx, spec_var)
         if vel is not None and spectrum is not None:
             spectrum = convert_to_db_if_linear(spec_var, ds0, spectrum)
-            print(spectrum)
+            #print(spectrum)
             #print(np.nanargmin(spectrum))
             #print(vel[np.nanargmin(spectrum)])
             #print(vel.where(~np.isnan(spectrum)))
@@ -634,8 +637,8 @@ def main():
     with st.sidebar.expander("Simulation Parameters"):
         simulator_type = st.radio("Hydrometeor Type in Simulation", options=["Snow", "Rain"], index=0)
         #lut_path = st.text_input("LUT path", value="/project/meteo/work/L.Terzi/McRadarTest/LUT/liquid_273.15_35.6GHz_elv90.csv")
-        lut_path_rain = st.text_input("Rain LUT path", value="/project/meteo/work/L.Terzi/McRadarTest/LUT/liquid_273.15_35.6GHz_elv90.csv")
-        lut_path_snow = st.text_input("Snow LUT path", value="/project/meteo/work/L.Terzi/McRadarTest/LUT/vonTerzi_dendrite_LUT.nc")
+        lut_path_rain = st.text_input("Rain LUT path", value="/project/meteo/work/L.Terzi/spectrawiz/scattering_luts/liquid_LUT.nc")
+        lut_path_snow = st.text_input("Snow LUT path", value="/project/meteo/work/L.Terzi/spectrawiz/scattering_luts/ice_LUT_vonTerzi_dendrite.nc")
         #log_R = st.slider("log₁₀(Rain rate R [mm/h])", min_value=-2.0, max_value=1.3, value=0.0, step=0.05)
         #R = 10 ** log_R
         #st.write(f"Rain rate R = {R:.2f} mm/h")
@@ -679,54 +682,40 @@ def main():
             )
 
             center_height = float(range_values[range_idx])
-            try:
-                vel_bins = radar_simulator._centers_to_edges(vel)
-                if simulator_type == "Rain":
-                    vel_sim, sim_H, _ = radar_simulator.simulate_rain_spectrum(
-                        vel_bins=vel_bins,
-                        center_height=center_height,
-                        eps_diss=eps_diss,
-                        noise_pow=noise_pow,
-                        nave=nave,
-                        theta_deg=theta_deg,
-                        uwind=uwind,
-                        time_int=time_int,
-                        lut_path=lut_path_rain,
-                        N0=N0,
-                        gamma=gamma,
-                        lam=lam,
-                        vertical_wind=vertical_wind,
-                    )
-                    sim_label = "Simulated (Rain)"
-                else:
-                    vel_sim, sim_H = radar_simulator.simulate_snow_spectrum(
-                        vel_bins=vel_bins,
-                        N0=N0,
-                        lam=lam,
-                        gamma=gamma,
-                        center_height=center_height,
-                        eps_diss=eps_diss,
-                        noise_pow=noise_pow,
-                        nave=nave,
-                        theta_deg=theta_deg,
-                        uwind=uwind,
-                        time_int=time_int,
-                        lut_path=lut_path_snow,
-                        vertical_wind=vertical_wind,
-                    )
-                    sim_label = "Simulated (Snow)"
-
-                fig5.add_trace(
-                    go.Scattergl(
-                        x=vel_sim,
-                        y=sim_H,
-                        mode="lines",
-                        name=sim_label,
-                        line=dict(color="#d62728", width=2, dash="dash"),
-                    )
+            vel_bins = radar_simulator._centers_to_edges(vel)
+            if simulator_type == "Rain":
+                lutPath = lut_path_rain
+                sim_label = "Simulated (Rain)"
+            else:                    
+                lutPath = lut_path_snow
+                sim_label = "Simulated (Snow)"
+            vel_sim, sim_H, PSD, D = radar_simulator.simulate_spectrum(
+                vel_bins=vel_bins,
+                center_height=center_height,
+                eps_diss=eps_diss,
+                noise_pow=noise_pow,
+                nave=nave,
+                theta_deg=theta_deg,
+                uwind=uwind,
+                time_int=time_int,
+                lut_path=lutPath,
+                N0=N0,
+                gamma=gamma,
+                lam=lam,
+                vertical_wind=vertical_wind,
                 )
-            except Exception as e:
-                st.warning(f"Simulation failed: {e}")
+            print(vel_sim)
+            fig5.add_trace(
+                go.Scattergl(
+                    x=vel_sim,
+                    y=sim_H,
+                    mode="lines",
+                    name=sim_label,
+                    line=dict(color="#d62728", width=2, dash="dash"),
+                )
+            )
+            #except Exception as e:
+            #    st.warning(f"Simulation failed: {e}")
 
             dark_gray = "#4d4d4d"
             grid_gray_major = "rgba(77,77,77,0.45)"
@@ -801,13 +790,13 @@ def main():
             st.plotly_chart(fig5, width="content", config={"displaylogo": False})
     with col6:
         # Panel 6: Simulated PSD (D vs PSD) - Plotly
-        Dmax = np.linspace(1e-5, 50.0e-3, 1000)
-        PSD = N0 * (Dmax ** gamma) * np.exp(-lam * Dmax)
-
+        #Dmax = np.linspace(1e-5, 50.0e-3, 1000)
+        #PSD = N0 * (Dmax ** gamma) * np.exp(-lam * Dmax)
+        #print(D)
         fig6 = go.Figure()
         fig6.add_trace(
             go.Scatter(
-                x=Dmax,
+                x=D,
                 y=PSD,
                 mode="lines",
                 name=f"Simulated PSD ({simulator_type})",
@@ -845,6 +834,13 @@ def main():
 
         fig6.update_xaxes(
             type="log",
+            dtick=1,  # major ticks at 10^n only (labeled)
+            minor=dict(
+                dtick="D1",      # minor ticks between decades
+                ticks="outside",
+                ticklen=5,
+                showgrid=False,
+            ),
             showgrid=True,
             gridcolor=grid_gray_major,
             gridwidth=1.2,
@@ -863,6 +859,12 @@ def main():
         fig6.update_yaxes(
             type="log",
             showgrid=True,
+            #type="log",
+            nticks=5,
+            minor=dict(
+                ticks="",
+                showgrid=False,
+                ),
             gridcolor=grid_gray_major,
             gridwidth=1.2,
             ticks="outside",
