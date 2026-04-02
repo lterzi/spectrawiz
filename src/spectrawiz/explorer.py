@@ -7,6 +7,11 @@ import pandas as pd
 from spectrawiz import radar_simulator
 import plotly.graph_objects as go
 import matplotlib
+import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
+import matplotlib.dates as mdates
+
+from plotly.subplots import make_subplots
 
 def mpl_to_plotly(cmap_name, n=255):
     """Convert a Matplotlib colormap to Plotly colorscale."""
@@ -490,11 +495,11 @@ def main():
             spectrum = convert_to_db_if_linear(spec_var, ds0, spectrum)
             mask = ~np.isnan(spectrum)
             spectrum = spectrum[mask]
-            vel = vel[mask]
+            valid_vel = vel[mask]
             fig4 = go.Figure()
             fig4.add_trace(
                 go.Scattergl(
-                    x=vel,
+                    x=valid_vel,
                     y=spectrum,
                     mode="lines",
                     name="Spectrum",
@@ -553,8 +558,6 @@ def main():
                 mirror=True,
             )
             st.plotly_chart(fig4, width='stretch', config={"displaylogo": False})
-
-    
 
     # --- Row 3: Two columns for panels 5, 6 ---
     col5, col6 = st.columns(2)
@@ -746,6 +749,106 @@ def main():
             mirror=True,
         )
         st.plotly_chart(fig6, width="content", config={"displaylogo": False})
+
+    # --- Save all panels as one PNG ---
+
+    save_path = st.sidebar.text_input("Save PNG as...", value="all_panels.png")
+    save_all = st.sidebar.button("Save all panels as one PNG")
+    fontsize=18
+    if save_all:
+        fig = plt.figure(figsize=(18, 12))
+        gs = gridspec.GridSpec(3, 4, height_ratios=[1, 1, 1], width_ratios=[1, 1, 1,0.35])
+
+        # Panel 1: Time x Range (spans all columns)
+        ax1 = fig.add_subplot(gs[0, :])
+        im1 = ax1.pcolormesh(time_values_disp, y_disp, z_disp, cmap=selected_cmap_panel1)
+        ax1.set_title("Time x Range",fontsize=fontsize)
+        ax1.set_ylabel("Range (m)",fontsize=fontsize)
+        cbar = plt.colorbar(im1, ax=ax1, pad=0.01, aspect=30)
+        cbar.set_label(f"{var} ({get_units_from_attrs(ds_mom[var])})", fontsize=fontsize)
+        cbar.ax.tick_params(labelsize=fontsize-2)
+        ax1.tick_params(labelsize=fontsize-2)
+        ax1.axvline(time_values_disp[time_idx], color='r', linestyle='--')
+        ax1.axhline(y_disp[range_idx], color='r', linestyle='--')
+        ax1.grid()
+        ax1.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+        ax1.xaxis.set_minor_locator(mdates.HourLocator(interval=1))
+        default_length = plt.rcParams['xtick.major.size']
+        ax1.tick_params(axis='x', which='major', length=default_length, width=1.5)
+        ax1.tick_params(axis='x', which='minor', length=default_length, width=1.5)
+
+        # Panel 2: Profile
+        ax2 = fig.add_subplot(gs[1, 0])
+        ax2.plot(z_disp[:, time_idx], y_disp)
+        ax2.set_title(f"Profile at {pd.to_datetime(time_values[time_idx]).strftime('%H:%M')}",fontsize=fontsize)
+        ax2.set_xlabel(var,fontsize=fontsize)
+        ax2.set_ylabel("Range (m)",fontsize=fontsize)
+        ax2.grid()
+        ax2.axhline(y_disp[range_idx], color='r', linestyle='--')
+        ax2.tick_params(labelsize=fontsize-2)
+
+        # Panel 3: Spectrogram
+        if 'vel' in locals() and 'rng' in locals() and 'specgram' in locals() and vel is not None and rng is not None and specgram is not None:
+            ax3 = fig.add_subplot(gs[1, 1])
+            im3 = ax3.pcolormesh(vel, rng, specgram, cmap=selected_cmap_panel3, shading='nearest')
+            ax3.set_title(f"Spectrogram at {pd.to_datetime(time_values[time_idx]).strftime('%H:%M')}",fontsize=fontsize)
+            ax3.set_xlabel("Velocity (m/s)",fontsize=fontsize)
+            ax3.set_ylabel("Range (m)",fontsize=fontsize)
+            ax3.grid()
+            cbar = plt.colorbar(im3, ax=ax3,pad = 0.01, aspect=30)
+            cbar.set_label(f"{spec_var} ({get_units_from_attrs(ds_mom[var])})", fontsize=fontsize)
+            cbar.ax.tick_params(labelsize=fontsize-2)
+            ax3.axhline(rng[range_idx], color='r', linestyle='--')
+            ax3.tick_params(labelsize=fontsize-2)
+            ax3.set_xlim(vmin_x, vmax_x)
+
+        # Panel 4: Spectrum
+        if 'valid_vel' in locals() and 'spectrum' in locals() and valid_vel is not None and spectrum is not None:
+            ax4 = fig.add_subplot(gs[1, 2])
+            ax4.plot(valid_vel, spectrum)
+            ax4.set_title(f"Spectrum at range {range_values[range_idx]:.1f} {units['range']}",fontsize=fontsize)
+            ax4.set_xlabel("Velocity (m/s)",fontsize=fontsize)
+            ax4.set_ylabel(var,fontsize=fontsize)
+            ax4.tick_params(labelsize=fontsize-2)
+            ax4.grid()
+
+        # Panel 5: Measured & Simulated Spectrum
+        if 'vel' in locals() and 'measured_spectrum' in locals() and 'vel_sim' in locals() and 'sim_H' in locals():
+            ax5 = fig.add_subplot(gs[2, 0])
+            ax5.plot(vel, measured_spectrum, label="Measured")
+            ax5.plot(vel_sim, sim_H, label="Simulated", linestyle='--')
+            ax5.set_title(f"Measured & Simulated Spectrum ({simulator_type})",fontsize=fontsize)
+            ax5.set_xlabel("Velocity (m/s)",fontsize=fontsize)
+            ax5.set_ylabel(var,fontsize=fontsize)
+            ax5.legend()
+            ax5.tick_params(labelsize=fontsize-2)
+            ax5.grid()
+
+        # Panel 6: Simulated PSD
+        if 'D' in locals() and 'PSD' in locals():
+            ax6 = fig.add_subplot(gs[2, 1])
+            ax6.plot(D, PSD)
+            ax6.set_title("Simulated PSD",fontsize=fontsize)
+            ax6.set_xlabel("Diameter D [m]",fontsize=fontsize)
+            ax6.set_ylabel("PSD",fontsize=fontsize)
+            ax6.set_xscale("log")
+            ax6.set_yscale("log")
+            ax6.tick_params(labelsize=fontsize-2)
+            ax6.grid()
+
+        # Hide unused axes (bottom right)
+        ax_unused = fig.add_subplot(gs[2, 2])
+        ax_unused.axis('off')
+        ax_unused = fig.add_subplot(gs[1, 3])
+        ax_unused.axis('off')
+        ax_unused = fig.add_subplot(gs[2, 3])
+        ax_unused.axis('off')
+
+
+        plt.tight_layout()
+        fig.savefig(save_path, dpi=200,bbox_inches='tight')
+        plt.close(fig)
+        st.success(f"All panels saved as {os.path.abspath(save_path)}")
 
     st.markdown("""
     ---
