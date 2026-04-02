@@ -1,7 +1,4 @@
-from __future__ import annotations
-
 import numpy as np
-import pandas as pd
 from scipy.constants import c
 from scipy import signal as sig
 import xarray as xr
@@ -83,16 +80,16 @@ def simulate_spectrum(
     uwind,
     time_int,
     lut_path,
-    wl=None,
-    freq_ghz=35.6,
+    #wl=None,
+    freq_ghz,
     K2=0.93,
     vertical_wind: float = 0.0,
 ):
     vel_bins = np.asarray(vel_bins, dtype=float)
     vel_centers = 0.5 * (vel_bins[:-1] + vel_bins[1:])
 
-    if wl is None:
-        wl = c / (float(freq_ghz) * 1e9)
+    #if wl is None:
+    wl = c / (float(freq_ghz) * 1e9)
 
     theta = float(theta_deg) / 180.0 * np.pi
 
