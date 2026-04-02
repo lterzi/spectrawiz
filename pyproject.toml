@@ -7,7 +7,7 @@ name = "spectrawiz"
 version = "0.1.0"
 description = "Radar spectra explorer and simulator"
 authors = [
-    { name = "Your Name", email = "your@email.com" }
+    { name = "Leonie von Terzi" }
 ]
 readme = "README.md"
 requires-python = ">=3.8"
@@ -18,11 +18,11 @@ dependencies = [
     "numpy",
     "pandas",
     "netcdf4",
-    "scipy"
+    "scipy",
+    "plotly"
 ]
 
 [project.scripts]
-spectrawiz-explorer = "spectrawiz.explorer:main"
 spectrawiz-process = "spectrawiz.process_data:main"
 
 [tool.setuptools.packages.find]
