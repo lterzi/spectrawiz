@@ -10,6 +10,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import matplotlib.dates as mdates
+import warnings
 
 from plotly.subplots import make_subplots
 
@@ -26,6 +27,7 @@ def mpl_to_plotly(cmap_name, n=255):
     return colorscale
 
 def main():
+    warnings.filterwarnings("ignore")
     print('###############################################################')
     print('new version of explorer.py loaded')
     print('###############################################################')
@@ -204,7 +206,6 @@ def main():
                         xlim[key] = (float(a), float(b))
                 except Exception:
                     xlim[key] = None
-                    st.warning(f"Invalid x-axis limits for {key}. Use format: HH:MM,HH:MM or full timestamp")
             else:
                 xlim[key] = None
 
@@ -215,7 +216,6 @@ def main():
                     ylim[key] = (ymin, ymax)
                 except Exception:
                     ylim[key] = None
-                    st.warning(f"Invalid y-axis limits for {key}. Use format: min,max")
             else:
                 ylim[key] = None
 
@@ -226,7 +226,6 @@ def main():
                     clim[key] = (vmin, vmax)
                 except Exception:
                     clim[key] = None
-                    st.warning(f"Invalid color limits for {key}. Use format: min,max")
             else:
                 clim[key] = None
 
