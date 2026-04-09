@@ -102,6 +102,14 @@ def main():
         "panel1": None,
         "panel3": None
     }
+    xlim = {
+        "panel1": None,
+        "panel3": None,
+    }
+    ylim = {
+        "panel1": None,
+        "panel3": None,
+    }
     cmap_cfg = {
         "panel1": "Spectral",
         "panel3": "Spectral",
@@ -127,13 +135,90 @@ def main():
 
     # --- Display/Units/Colorbar config dictionary (can override defaults) ---
     with st.sidebar.expander("Display Options"):
-        mpl_cmaps = sorted([m for m in matplotlib.colormaps if not m.endswith("_r")])
-        selected_cmap_panel1 = st.selectbox("Colormap (panel 1)", options=mpl_cmaps, index=mpl_cmaps.index("Spectral"))
-        selected_cmap_panel3 = st.selectbox("Colormap (panel 3)", options=mpl_cmaps, index=mpl_cmaps.index("Spectral"))
-        colorbar_limits = {
-            "panel1": st.text_input("Colorbar limits (panel 1, e.g. 0,30)", ""),
-            "panel3": st.text_input("Colorbar limits (panel 3, e.g. 0,1)", ""),
+        def _parse_time(s, date_ref):
+            """Accept HH:MM, HH:MM:SS, or full timestamp; prepend date_ref date if no date given."""
+            s = s.strip()
+            # If string contains no date part (no '-' or '/'), prepend the reference date
+            if "-" not in s and "/" not in s:
+                s = f"{date_ref.strftime('%Y-%m-%d')} {s}"
+            return pd.Timestamp(s)
+
+        mpl_cmaps = sorted(
+            [m for m in matplotlib.colormaps if not m.endswith("_r")],
+            key=str.casefold,
+        )
+
+        panel1_xlimits = st.text_input(
+            "X-axis limits (e.g. 06:00,12:00 or 2025-09-10 06:00,2025-09-10 12:00)",
+            "",
+            key="panel1_xlimits",
+        )
+        panel1_ylimits = st.text_input("Y-axis limits (e.g. 0,3000)", "", key="panel1_ylimits")
+        selected_cmap_panel1 = st.selectbox(
+            "Colormap",
+            options=mpl_cmaps,
+            index=mpl_cmaps.index("Spectral"),
+            key="panel1_cmap",
+        )
+        panel1_colorbar_limits = st.text_input(
+            "Colorbar limits (e.g. 0,30)",
+            "",
+            key="panel1_colorbar_limits",
+        )
+
+        panel3_xlimits = st.text_input("X-axis limits (e.g. -10,10)", "", key="panel3_xlimits")
+        panel3_ylimits = st.text_input("Y-axis limits (e.g. 0,3000)", "", key="panel3_ylimits")
+        selected_cmap_panel3 = st.selectbox(
+            "Colormap",
+            options=mpl_cmaps,
+            index=mpl_cmaps.index("Spectral"),
+            key="panel3_cmap",
+        )
+        panel3_colorbar_limits = st.text_input(
+            "Colorbar limits (e.g. 0,1)",
+            "",
+            key="panel3_colorbar_limits",
+        )
+
+        xlimits = {
+            "panel1": panel1_xlimits,
+            "panel3": panel3_xlimits,
         }
+        ylimits = {
+            "panel1": panel1_ylimits,
+            "panel3": panel3_ylimits,
+        }
+        colorbar_limits = {
+            "panel1": panel1_colorbar_limits,
+            "panel3": panel3_colorbar_limits,
+        }
+
+        _date_ref = pd.Timestamp(time_values[0])
+        for key, val in xlimits.items():
+            if val:
+                try:
+                    a, b = [s.strip() for s in val.split(",", 1)]
+                    if key == "panel1":
+                        xlim[key] = (_parse_time(a, _date_ref), _parse_time(b, _date_ref))
+                    else:
+                        xlim[key] = (float(a), float(b))
+                except Exception:
+                    xlim[key] = None
+                    st.warning(f"Invalid x-axis limits for {key}. Use format: HH:MM,HH:MM or full timestamp")
+            else:
+                xlim[key] = None
+
+        for key, val in ylimits.items():
+            if val:
+                try:
+                    ymin, ymax = [float(s.strip()) for s in val.split(",")]
+                    ylim[key] = (ymin, ymax)
+                except Exception:
+                    ylim[key] = None
+                    st.warning(f"Invalid y-axis limits for {key}. Use format: min,max")
+            else:
+                ylim[key] = None
+
         for key, val in colorbar_limits.items():
             if val:
                 try:
@@ -244,6 +329,29 @@ def main():
         z_ds = np.asarray(z_ds, dtype=np.float32)
         return z_ds, x_ds, y_ds, sx, sy
 
+    def subset_heatmap(z, x, y, x_range=None, y_range=None):
+        x_mask = np.ones(len(x), dtype=bool)
+        y_mask = np.ones(len(y), dtype=bool)
+
+        if x_range:
+            x_start = pd.Timestamp(x_range[0])
+            x_end = pd.Timestamp(x_range[1])
+            x_mask = (x >= x_start) & (x <= x_end)
+        if y_range:
+            y_start, y_end = y_range
+            y_min, y_max = sorted((y_start, y_end))
+            y_mask = (y >= y_min) & (y <= y_max)
+
+        if not np.any(x_mask):
+            x_mask[:] = True
+        if not np.any(y_mask):
+            y_mask[:] = True
+
+        z_sub = z[np.ix_(y_mask, x_mask)]
+        x_sub = x[x_mask]
+        y_sub = y[y_mask]
+        return z_sub, x_sub, y_sub
+
     fontsize=14
 
     # --- Panel 1: Time-Height Plot ---
@@ -252,7 +360,21 @@ def main():
     time_values_disp = pd.to_datetime(ds_mom[time_var].values)
     y_disp = ds_mom[range_var].values
 
-    z_ds, x_ds, y_ds, sx, sy = downsample_heatmap(z_disp, time_values_disp, y_disp, max_x=900, max_y=400)
+    z_panel1, time_panel1, y_panel1 = subset_heatmap(
+        z_disp,
+        time_values_disp,
+        y_disp,
+        x_range=xlim["panel1"],
+        y_range=ylim["panel1"],
+    )
+
+    z_ds, x_ds, y_ds, sx, sy = downsample_heatmap(
+        z_panel1,
+        time_panel1,
+        y_panel1,
+        max_x=900,
+        max_y=400,
+    )
 
     fig1 = go.Figure(
         data=go.Heatmap(
@@ -288,6 +410,7 @@ def main():
     )
 
     fig1.update_xaxes(
+        range=list(xlim["panel1"]) if xlim["panel1"] else None,
         showgrid=True,
         gridcolor=grid_gray_major,
         gridwidth=1.2,
@@ -316,6 +439,7 @@ def main():
     )
 
     fig1.update_yaxes(
+        range=list(ylim["panel1"]) if ylim["panel1"] else None,
         showgrid=True,
         gridcolor=grid_gray_major,
         gridwidth=1.2,
@@ -450,7 +574,7 @@ def main():
                 font=dict(size=25, color="#4d4d4d"),
             )
             fig3.update_xaxes(
-                range=[vmin_x, vmax_x],
+                range=list(xlim["panel3"]) if xlim["panel3"] else [vmin_x, vmax_x],
                 showgrid=True,
                 gridcolor=grid_gray_major,
                 gridwidth=1.2,
@@ -466,6 +590,7 @@ def main():
                 mirror=True,
             )
             fig3.update_yaxes(
+                range=list(ylim["panel3"]) if ylim["panel3"] else None,
                 showgrid=True,
                 gridcolor=grid_gray_major,
                 gridwidth=1.2,
