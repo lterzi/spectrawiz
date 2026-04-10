@@ -44,11 +44,16 @@ def as_vel_ref(vel_ref) -> np.ndarray | None:
 def decode_time_if_needed(ds: xr.Dataset) -> xr.Dataset:
     # Fix attribute name if needed
     if "time" in ds:
+        # Already decoded — nothing to do
+        if np.issubdtype(ds["time"].dtype, np.datetime64):
+            return ds
+
         # Accept both 'units' and 'Units'
-        units = ds["time"].attrs.get("units") or ds["time"].attrs.get("Units")
+        units = ds["time"].attrs.get("units") or ds["time"].attrs.get("Units") or ds["time"].attrs.get("long_name")
+        print('units', units)
+
         if units is None:
-            # fallback default
-            ds["time"].attrs["units"] = "seconds since 1970-01-01 00:00:00 UTC"
+            ds["time"].attrs["units"] = "seconds since 1970-01-01 00:00:00"
         else:
             # Try to parse non-standard units string
             if "since" in units:
@@ -57,7 +62,6 @@ def decode_time_if_needed(ds: xr.Dataset) -> xr.Dataset:
                 match = re.search(r"since\s+([0-9/:\-\s]+)", units)
                 if match:
                     epoch = match.group(1).strip()
-                    # Try to parse various date formats
                     from datetime import datetime
                     for fmt in ("%Y-%m-%d %H:%M:%S", "%Y/%m/%d %H:%M:%S", "%d/%m/%Y %H:%M:%S", "%m/%d/%Y %H:%M:%S", "%d.%m.%Y %H:%M:%S", "%d/%m/%Y %H:%M", "%d/%m/%Y"):
                         try:
@@ -68,15 +72,23 @@ def decode_time_if_needed(ds: xr.Dataset) -> xr.Dataset:
                         except Exception:
                             continue
                     else:
-                        # fallback to 2001-01-01 if not parseable
-                        ds["time"].attrs["units"] = "seconds since 2001-01-01 00:00:00"
+                        ds["time"].attrs["units"] = "seconds since 1970-01-01 00:00:00"
                 else:
-                    ds["time"].attrs["units"] = "seconds since 2001-01-01 00:00:00"
+                    ds["time"].attrs["units"] = "seconds since 1970-01-01 00:00:00"
             else:
-                ds["time"].attrs["units"] = "seconds since 2001-01-01 00:00:00"
+                ds["time"].attrs["units"] = "seconds since 1970-01-01 00:00:00"
+
         # Remove non-standard 'Units' attribute if present
         if "Units" in ds["time"].attrs:
             del ds["time"].attrs["Units"]
+
+        # Move units/calendar from attrs to encoding so decode_cf doesn't conflict
+        time_units = ds["time"].attrs.pop("units", None)
+        calendar = ds["time"].attrs.pop("calendar", "standard")
+        if time_units is not None:
+            ds["time"].encoding["units"] = time_units
+            ds["time"].encoding["calendar"] = calendar
+
     try:
         return xr.decode_cf(ds)
     except Exception:

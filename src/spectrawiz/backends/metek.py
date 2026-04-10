@@ -12,7 +12,7 @@ from ..processing_common import (
     compute_ldr,
     compute_spectral_moments,
     decode_time_if_needed,
-    ensure_datetime_time,
+    #ensure_datetime_time,
     finalize_metadata,
 )
 
@@ -74,7 +74,7 @@ class MetekBackend(RadarBackend):
         include_ldr: bool = True,
     ) -> xr.Dataset:
         ds = decode_time_if_needed(ds)
-        ds = ensure_datetime_time(ds, time_var="time")
+        # ds = ensure_datetime_time(ds, time_var="time")
 
         have_cross = "SPCcx" in ds.variables
         base_vars = ["SPCco", "SNRCorFaCo", "doppler", "HSDco", "npw1", "npw2", "RadarConst", "range", "time"]
@@ -122,7 +122,7 @@ class MetekBackend(RadarBackend):
             out = xr.merge([out, compute_ldr(out["sZeCo"], out["sZeCx"], vel_dim="Vel")])
 
         out = add_standard_variable_attrs(out)
-        out = ensure_datetime_time(out, time_var="time")
+        # out = ensure_datetime_time(out, time_var="time")
         if "time" in out.coords:
             out = out.sortby("time")
 
