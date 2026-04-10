@@ -297,9 +297,9 @@ def main():
                 var_units = get_units_from_attrs(var)
             except Exception:
                 var_units = ""
-        print(var_units)
+        #print(var_units)
         var_units_lc = str(var_units).lower().replace(" ", "")
-        print('var_units_lc:', var_units_lc)
+        #print('var_units_lc:', var_units_lc)
         # If already in dB, do nothing
         if any(x in var_units_lc for x in ["db", "dbz", "dbm"]):
             return values
@@ -646,8 +646,8 @@ def main():
     with col3:
         vel, spectrum = load_spectrum(files, ds_mom, prof_time_idx, range_idx, spec_var)
         if vel is not None and spectrum is not None:
-            print(spectrum)
-            print(spectrum.attrs)
+            #print(spectrum)
+            #print(spectrum.attrs)
             spectrum = convert_to_db_if_linear(spec_var, ds0, spectrum)
             mask = ~np.isnan(spectrum)
             spectrum = spectrum[mask]
@@ -861,14 +861,6 @@ def main():
             font=dict(size=25, color="#4d4d4d"),
         )
         fig6.update_xaxes(
-            type="log",
-            dtick=1,
-            minor=dict(
-                dtick="D1",
-                ticks="outside",
-                ticklen=5,
-                showgrid=False,
-            ),
             showgrid=True,
             gridcolor=grid_gray_major,
             gridwidth=1.2,
@@ -882,15 +874,12 @@ def main():
             linecolor=dark_gray,
             linewidth=1.5,
             mirror=True,
+            exponentformat="e",
         )
         fig6.update_yaxes(
             type="log",
             showgrid=True,
             nticks=5,
-            minor=dict(
-                ticks="",
-                showgrid=False,
-            ),
             gridcolor=grid_gray_major,
             gridwidth=1.2,
             ticks="outside",
