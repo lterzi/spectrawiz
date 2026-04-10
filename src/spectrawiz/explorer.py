@@ -259,28 +259,57 @@ def main():
                 return var.attrs[key]
         return ""
 
+    # def convert_to_db_if_linear(varname, ds, values):
+    #     """
+    #     If units suggest linear reflectivity, convert to dB (10*log10).
+    #     Only convert if not already in dB.
+    #     """
+    #     try:
+    #         var = ds[varname]
+    #         var_units = get_units_from_attrs(var)
+    #     except Exception:
+    #         var_units = ""
+    #     print(var_units)
+    #     var_units_lc = str(var_units).lower().replace(" ", "")
+    #     print('var_units_lc:', var_units_lc)
+    #     # If already in dB, do nothing
+    #     if any(x in var_units_lc for x in ["db", "dbz", "dbm"]):
+    #         return values
+    #     # Typical linear reflectivity units
+    #     linear_patterns = ["mm6", "mm^6", "mm6/m3", "mm^6/m^3", "mm6m-3", "mm^6m^-3", "mm6 m-3 (m s-1)-1"]
+    #     if any(pat in var_units_lc for pat in linear_patterns):
+    #         values = np.where(values > 0, values, np.nan)
+    #         ds[varname].attrs["units"] = "dB"
+    #         return 10 * np.log10(values)
+    #     return values
     def convert_to_db_if_linear(varname, ds, values):
         """
         If units suggest linear reflectivity, convert to dB (10*log10).
         Only convert if not already in dB.
         """
-        try:
-            var = ds[varname]
-            var_units = get_units_from_attrs(var)
-        except Exception:
-            var_units = ""
+        # Prefer units from the values array itself, fall back to ds
+        var_units = ""
+        if hasattr(values, "attrs"):
+            var_units = get_units_from_attrs(values)
+        if not var_units:
+            try:
+                var = ds[varname]
+                var_units = get_units_from_attrs(var)
+            except Exception:
+                var_units = ""
+        print(var_units)
         var_units_lc = str(var_units).lower().replace(" ", "")
+        print('var_units_lc:', var_units_lc)
         # If already in dB, do nothing
         if any(x in var_units_lc for x in ["db", "dbz", "dbm"]):
             return values
         # Typical linear reflectivity units
-        linear_patterns = ["mm6", "mm^6", "mm6/m3", "mm^6/m^3", "mm6m-3", "mm^6m^-3"]
+        linear_patterns = ["mm6", "mm^6", "mm6/m3", "mm^6/m^3", "mm6m-3", "mm^6m^-3", "mm6 m-3 (m s-1)-1"]
         if any(pat in var_units_lc for pat in linear_patterns):
             values = np.where(values > 0, values, np.nan)
             ds[varname].attrs["units"] = "dB"
             return 10 * np.log10(values)
         return values
-
     def find_file_for_time(files, ds_mom, time_idx):
         time_cumsum = np.cumsum([xr.open_dataset(f)["time"].size for f in files])
         file_idx = np.searchsorted(time_cumsum, time_idx, side="right")
@@ -514,6 +543,7 @@ def main():
             mirror=True
         )
         fig2.update_yaxes(
+            range=list(ylim["panel3"]) if ylim["panel3"] else None,
             showgrid=True,
             gridcolor=grid_gray,
             ticks="outside",
@@ -616,6 +646,8 @@ def main():
     with col3:
         vel, spectrum = load_spectrum(files, ds_mom, prof_time_idx, range_idx, spec_var)
         if vel is not None and spectrum is not None:
+            print(spectrum)
+            print(spectrum.attrs)
             spectrum = convert_to_db_if_linear(spec_var, ds0, spectrum)
             mask = ~np.isnan(spectrum)
             spectrum = spectrum[mask]
