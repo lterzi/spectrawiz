@@ -285,7 +285,7 @@ def main():
     def convert_to_db_if_linear(varname, ds, values):
         """
         If units suggest linear reflectivity, convert to dB (10*log10).
-        Only convert if not already in dB.
+        Returns converted values and the display unit string.
         """
         # Prefer units from the values array itself, fall back to ds
         var_units = ""
@@ -297,19 +297,20 @@ def main():
                 var_units = get_units_from_attrs(var)
             except Exception:
                 var_units = ""
-        #print(var_units)
+        values_out = np.asarray(values)
         var_units_lc = str(var_units).lower().replace(" ", "")
-        #print('var_units_lc:', var_units_lc)
+
         # If already in dB, do nothing
         if any(x in var_units_lc for x in ["db", "dbz", "dbm"]):
-            return values
+            return values_out, (var_units if var_units else "dB")
+
         # Typical linear reflectivity units
         linear_patterns = ["mm6", "mm^6", "mm6/m3", "mm^6/m^3", "mm6m-3", "mm^6m^-3", "mm6 m-3 (m s-1)-1"]
         if any(pat in var_units_lc for pat in linear_patterns):
-            values = np.where(values > 0, values, np.nan)
-            ds[varname].attrs["units"] = "dB"
-            return 10 * np.log10(values)
-        return values
+            values_out = np.where(values_out > 0, values_out, np.nan)
+            return 10 * np.log10(values_out), "dB"
+
+        return values_out, str(var_units)
     def find_file_for_time(files, ds_mom, time_idx):
         time_cumsum = np.cumsum([xr.open_dataset(f)["time"].size for f in files])
         file_idx = np.searchsorted(time_cumsum, time_idx, side="right")
@@ -384,7 +385,7 @@ def main():
 
     # --- Panel 1: Time-Height Plot ---
     z_disp = ds_mom[var].T.values
-    z_disp = convert_to_db_if_linear(var, ds_mom, z_disp)
+    z_disp, panel1_unit = convert_to_db_if_linear(var, ds_mom, z_disp)
     time_values_disp = pd.to_datetime(ds_mom[time_var].values)
     y_disp = ds_mom[range_var].values
 
@@ -413,7 +414,7 @@ def main():
             colorscale=mpl_to_plotly(selected_cmap_panel1),
             zmin=clim["panel1"][0] if clim["panel1"] else None,
             zmax=clim["panel1"][1] if clim["panel1"] else None,
-            colorbar=dict(title=f"{var} ({get_units_from_attrs(ds_mom[var])})")
+            colorbar=dict(title=f"{var} ({panel1_unit})" if panel1_unit else var)
         )
     )
     dark_gray = "#4d4d4d"
@@ -485,7 +486,7 @@ def main():
     )
 
     fig1.data[0].colorbar.title = dict(
-        text=f"{var} ({get_units_from_attrs(ds_mom[var])})",
+        text=f"{var} ({panel1_unit})" if panel1_unit else var,
         font=dict(size=18, color=dark_gray)
     )
     fig1.data[0].colorbar.tickfont = dict(size=16, color=dark_gray)
@@ -512,7 +513,7 @@ def main():
         dark_gray = "#4d4d4d"
         grid_gray = "rgba(77,77,77,0.35)"
         fig2.update_layout(
-            xaxis_title=f"{var} ({get_units_from_attrs(ds_mom[var])})",
+            xaxis_title=f"{var} ({panel1_unit})" if panel1_unit else var,
             yaxis_title=f"Range ({units['range']})",
             height=450,
             margin=dict(l=20, r=20, t=40, b=20),
@@ -561,7 +562,7 @@ def main():
     with col2:
         vel, rng, specgram = load_spectrogram(files, ds_mom, prof_time_idx, spec_var)
         if vel is not None and rng is not None and specgram is not None:
-            specgram = convert_to_db_if_linear(spec_var, ds0, specgram)
+            specgram, specgram_unit = convert_to_db_if_linear(spec_var, ds0, specgram)
             valid_vel_mask = np.any(~np.isnan(specgram), axis=0)
             if np.any(valid_vel_mask):
                 vmin_x = vel[np.argmax(valid_vel_mask)]
@@ -637,7 +638,7 @@ def main():
             )
             fig3.add_hline(y=rng[range_idx], line_dash="dash", line_color="red")
             fig3.data[0].colorbar.title = dict(
-                text=f"{var} ({get_units_from_attrs(ds_mom[var])})",
+                text=f"{spec_var} ({specgram_unit})" if specgram_unit else spec_var,
                 font=dict(size=18, color=dark_gray)
             )
             fig3.data[0].colorbar.tickfont = dict(size=16, color=dark_gray)
@@ -648,7 +649,7 @@ def main():
         if vel is not None and spectrum is not None:
             #print(spectrum)
             #print(spectrum.attrs)
-            spectrum = convert_to_db_if_linear(spec_var, ds0, spectrum)
+            spectrum, spectrum_unit = convert_to_db_if_linear(spec_var, ds0, spectrum)
             mask = ~np.isnan(spectrum)
             spectrum = spectrum[mask]
             valid_vel = vel[mask]
@@ -666,7 +667,7 @@ def main():
             grid_gray_major = "rgba(77,77,77,0.45)"
             fig4.update_layout(
                 xaxis_title=f"Velocity ({units['velocity']})",
-                yaxis_title=f"{var} ({get_units_from_attrs(ds_mom[var])})",
+                yaxis_title=f"{spec_var} ({spectrum_unit})" if spectrum_unit else spec_var,
                 height=450,
                 margin=dict(l=20, r=20, t=40, b=20),
                 font=dict(size=20, color=dark_gray),
@@ -721,7 +722,7 @@ def main():
     with col5:
         vel, rng, specgram = load_spectrogram(files, ds_mom, prof_time_idx, spec_var)
         if vel is not None and rng is not None and specgram is not None:
-            specgram = convert_to_db_if_linear(spec_var, ds0, specgram)
+            specgram, _ = convert_to_db_if_linear(spec_var, ds0, specgram)
             measured_spectrum = specgram[range_idx, :]
             fig5 = go.Figure()
             fig5.add_trace(
