@@ -97,7 +97,7 @@ def simulate_spectrum(
     lut = xr.open_dataset(lut_path)
     #except Exception as e:
     #    raise RuntimeError(f"Failed to open LUT {lut_path}: {e}")
-    print(lut)
+    #print(lut)
     # Always select first value for extra dimensions
     if "elevation" in lut.coords:
         lut = lut.sel(elevation=90, method="nearest")
@@ -133,12 +133,12 @@ def simulate_spectrum(
     #print('D snow max', D.max())
     v_lut = -1 * np.asarray(v_lut, dtype=float).flatten() + float(vertical_wind)
     cbck = np.asarray(cbck, dtype=float).flatten()
-    print(D.max(),v_lut.max(),cbck.max())
+    #print(D.max(),v_lut.max(),cbck.max())
 
     #PSD = float(N0) * np.exp(-float(lam) * D)
     PSD = _gamma_dsd(D, N0, lam, gamma)
     #print('PSD snow',PSD)
-    print('PSD max', PSD.max())
+    #print('PSD max', PSD.max())
     
     prefactor = wl ** 4 / (np.pi**5 * float(K2))
     dD_dv = np.abs(np.gradient(D) / np.gradient(v_lut))
@@ -148,7 +148,7 @@ def simulate_spectrum(
     g = da.groupby_bins("vel", vel_bins, labels=vel_centers).mean()
     spec_H = g.rename({"vel_bins": "vel"}).reindex(vel=vel_centers, fill_value=0.0).values
     spec_H = g.rename({"vel_bins": "vel"}).fillna(0).values
-    print('spec_H max', spec_H.max())
+    #print('spec_H max', spec_H.max())
     
     # Broadening + noise (same model as rain)
     L_s = float(uwind) * float(time_int) + 2.0 * float(center_height) * np.sin(theta)
