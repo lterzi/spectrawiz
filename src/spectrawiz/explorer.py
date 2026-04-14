@@ -31,8 +31,29 @@ def main():
     print('###############################################################')
     print('new version of explorer.py loaded')
     print('###############################################################')
+
     st.set_page_config(layout="wide")
-    st.title("SpectraWiz: Interactive Radar Spectra Visualization")
+
+    # --- Title and logo using Streamlit columns ---
+    col_title, col_logo = st.columns([8, 1])
+    with col_title:
+        st.markdown("<h1 style='margin-bottom: 0.2em;'>SpectraWiz: Interactive Radar Spectra Visualization</h1>", unsafe_allow_html=True)
+    with col_logo:
+        st.image("static/mim_logo_gross.png", width=160)
+
+    # --- MIM Logo at top right using HTML/CSS only, from static folder ---
+    st.markdown(
+        """
+        <div style="position: fixed; top: 1.5rem; right: 2.5rem; z-index: 9999;">
+            <img src="/static/mim_logo_gross.png" alt="MIM Logo" style="height:54px; width:auto; box-shadow: 0 0 6px #fff; background: #fff; border-radius: 8px;"
+                 onerror="this.style.display='none'; document.getElementById('logo-error').style.display='block';">
+        </div>
+        <div id="logo-error" style="display:none; position: fixed; top: 1.5rem; right: 2.5rem; z-index: 9999; color: red; background: #fff; padding: 6px 12px; border-radius: 8px; box-shadow: 0 0 6px #fff;">
+            Logo not found: <a href='/static/mim_logo_gross.png' target='_blank'>/static/mim_logo_gross.png</a>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     # --- User Inputs ---
     datapath = st.sidebar.text_input("Data directory", "processed/")
@@ -975,6 +996,7 @@ def main():
                 title_font=dict(size=24, color=dark_gray),
                 tickfont=dict(size=20, color=dark_gray),
                 showline=True,
+                tickformat=".0f",
                 linecolor=dark_gray,
                 linewidth=1.5,
                 mirror=True,
