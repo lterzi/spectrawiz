@@ -176,6 +176,8 @@ def main():
         unsafe_allow_html=True,
     )
 
+    if st.session_state.time_idx >= len(time_values):
+        st.session_state.time_idx = len(time_values) - 1
     st.sidebar.markdown("**Time**")
     t_col1, t_col2, t_col3 = st.sidebar.columns([1, 8, 1], vertical_alignment="center")
     with t_col1:
