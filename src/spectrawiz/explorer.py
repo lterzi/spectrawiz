@@ -320,25 +320,27 @@ def main():
     # --- Simulation controls in sidebar ---
     with st.sidebar.expander("Simulation Parameters"):
         simulator_type = st.radio("Hydrometeor Type in Simulation", options=["Snow", "Rain"], index=0)
-        lut_path_rain = st.text_input("Rain LUT path", value="/project/meteo/work/L.Terzi/spectrawiz/scattering_luts/liquid_LUT.nc")
-        lut_path_snow = st.text_input("Snow LUT path", value="/project/meteo/work/L.Terzi/spectrawiz/scattering_luts/ice_LUT_vonTerzi_dendrite.nc")
+        lut_path_rain = st.text_input("Rain LUT path", value="scattering_luts/liquid_LUT.nc")
+        lut_path_snow = st.text_input("Snow LUT path", value="scattering_luts/ice_LUT_vonTerzi_dendrite.nc")
         freq_ghz = st.selectbox("Radar Frequency [GHz]", options=[9.6, 35.6, 94.0], index=2)
         gamma = st.slider("Gamma DSD shape parameter (gamma)", min_value=0.0, max_value=5.0, value=0.0, step=0.1)
-        log_lam = st.slider("log₁₀(lambda) [m⁻¹]", min_value=2.0, max_value=5.0, value=3.0, step=0.01)
+        log_lam = st.slider("log₁₀(lambda) [m⁻¹]", min_value=1.0, max_value=7.0, value=3.0, step=0.01)
         lam = 10 ** log_lam
         st.write(f"lambda = {lam:.2f} m⁻¹")
-        log_N0 = st.slider("log₁₀(N0) [m⁻³ mm⁻¹]", min_value=0.0, max_value=8.0, value=4.0, step=0.05)
+        log_N0 = st.slider("log₁₀(N0) [m⁻³ mm⁻¹]", min_value=0.0, max_value=10.0, value=4.0, step=0.05)
         N0 = 10 ** log_N0
         st.write(f"N0 = {N0:.2e} m⁻³ mm⁻¹")
-        log_eps = st.slider("log₁₀(eps_diss)", min_value=-5.0, max_value=-2.0, value=-3.0, step=0.1)
+        att = st.slider("Attenuation [dB/km]", min_value=0.0, max_value=20.0, value=0.0, step=0.5)
+        log_eps = st.slider("log₁₀(Eddy_diss_rate)", min_value=-5.0, max_value=-2.0, value=-3.0, step=0.1)
         eps_diss = 10 ** log_eps
-        st.write(f"eps_diss = {eps_diss:.2e}")
+        st.write(f"Eddy Dissipation Rate = {eps_diss:.2e}")
         uwind = st.slider("Horizontal wind [m/s]", min_value=-20.0, max_value=20.0, value=0.0, step=0.1)
         vertical_wind = st.slider("Vertical wind [m/s]", min_value=-5.0, max_value=5.0, value=0.0, step=0.1)
         noise_pow = st.slider("Noise power [dB]", min_value=-60, max_value=0, value=-40, step=1)
         nave = st.slider("Averaging (nave)", min_value=1, max_value=100, value=10, step=1)
         theta_deg = st.slider("Beam width [deg]", min_value=0.0, max_value=5.0, value=0.5, step=0.1)
-        time_int = st.slider("Integration time [s]", min_value=0.1, max_value=10.0, value=1.0, step=0.1)
+        #time_int = st.slider("Integration time [s]", min_value=0.1, max_value=10.0, value=1.0, step=0.1)
+        prf = st.slider("Pulse Repetition Frequency [Hz]", min_value=1000, max_value=10000, value=2500, step=100)
         
     def get_units_from_attrs(var):
         """Get units from variable attrs, case-insensitive for 'unit' or 'units'."""
@@ -922,13 +924,15 @@ def main():
                 nave=nave,
                 theta_deg=theta_deg,
                 uwind=uwind,
-                time_int=time_int,
+                #time_int=time_int,
                 lut_path=lutPath,
                 N0=N0,
                 gamma=gamma,
                 lam=lam,
                 vertical_wind=vertical_wind,
                 freq_ghz = freq_ghz,
+                prf = prf,
+                att = att,
             )
             print(precip_rate)
             fig5.add_trace(

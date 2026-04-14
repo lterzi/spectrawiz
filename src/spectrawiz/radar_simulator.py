@@ -110,14 +110,17 @@ def simulate_spectrum(
     nave,
     theta_deg,
     uwind,
-    time_int,
+    #time_int,
     lut_path,
     #wl=None,
+    prf,
     freq_ghz,
+    att,
     K2=0.93,
     vertical_wind: float = 0.0,
 ):
     vel_bins = np.asarray(vel_bins, dtype=float)
+    nfft = len(vel_bins) - 1
     vel_centers = 0.5 * (vel_bins[:-1] + vel_bins[1:])
 
     #if wl is None:
@@ -189,9 +192,14 @@ def simulate_spectrum(
     g = da.groupby_bins("vel", vel_bins, labels=vel_centers).mean()
     spec_H = g.rename({"vel_bins": "vel"}).reindex(vel=vel_centers, fill_value=0.0).values
     spec_H = g.rename({"vel_bins": "vel"}).fillna(0).values
+
+    # add attenuation
+    att_lin = 10.0 ** (float(att) / 10.0)
+    spec_H = spec_H / att_lin
     #print('spec_H max', spec_H.max())
     
     # Broadening + noise (same model as rain)
+    time_int = nave*nfft/prf
     L_s = float(uwind) * float(time_int) + 2.0 * float(center_height) * np.sin(theta)
     L_lam = wl / 2.0
     sigma_t2 = 0.75 * (float(eps_diss) / (2.0 * np.pi)) ** (2.0 / 3.0) * (
