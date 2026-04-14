@@ -35,7 +35,7 @@ def main():
     st.title("SpectraWiz: Interactive Radar Spectra Visualization")
 
     # --- User Inputs ---
-    datapath = st.sidebar.text_input("Data directory", "/project/meteo/work/L.Terzi/MIM_radars/spectra_visualisation/processed_data/2025/09/10/")
+    datapath = st.sidebar.text_input("Data directory", "processed/")
     date = st.sidebar.text_input("Date (YYYY-MM-DD)", "2025-09-10")
     pattern = st.sidebar.text_input("File pattern", "*rpg_hourly_proc.nc")
 
@@ -118,18 +118,72 @@ def main():
     }
 
     # --- Sliders for selection (always visible and at the top) ---
-    time_idx = st.sidebar.select_slider(
-        "Time",
-        options=list(range(len(time_values))),
-        value=len(time_values) // 2,
-        format_func=lambda i: pd.to_datetime(time_values[i]).strftime('%Y-%m-%d %H:%M')
+    if "time_idx" not in st.session_state:
+        st.session_state.time_idx = len(time_values) // 2
+    if "range_idx" not in st.session_state:
+        st.session_state.range_idx = len(range_values) // 2
+
+    # Custom CSS for compact step buttons
+    st.sidebar.markdown(
+        """
+        <style>
+        div[data-testid="stHorizontalBlock"] button[kind="secondary"] {
+            padding: 0.15rem 0.3rem !important;
+            min-height: 1.8rem;
+            font-size: 1rem;
+            border-radius: 6px;
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+        }
+        div[data-testid="stHorizontalBlock"] button[kind="secondary"] div,
+        div[data-testid="stHorizontalBlock"] button[kind="secondary"] p {
+            width: 100% !important;
+            text-align: center !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
     )
-    range_idx = st.sidebar.select_slider(
-        "Range",
-        options=list(range(len(range_values))),
-        value=len(range_values) // 2,
-        format_func=lambda i: f"{range_values[i]:.1f} {units['range']}"
-    )
+
+    st.sidebar.markdown("**Time**")
+    t_col1, t_col2, t_col3 = st.sidebar.columns([1, 8, 1], vertical_alignment="center")
+    with t_col1:
+        if st.button("◂", key="time_prev", use_container_width=True):
+            st.session_state.time_idx = max(0, st.session_state.time_idx - 1)
+    with t_col3:
+        if st.button("▸", key="time_next", use_container_width=True):
+            st.session_state.time_idx = min(len(time_values) - 1, st.session_state.time_idx + 1)
+    with t_col2:
+        time_idx = st.select_slider(
+            "Time",
+            options=list(range(len(time_values))),
+            value=st.session_state.time_idx,
+            format_func=lambda i: pd.to_datetime(time_values[i]).strftime('%Y-%m-%d %H:%M'),
+            label_visibility="collapsed",
+            key="time_slider",
+        )
+    st.session_state.time_idx = time_idx
+
+    st.sidebar.markdown("**Range**")
+    r_col1, r_col2, r_col3 = st.sidebar.columns([1, 8, 1], vertical_alignment="center")
+    with r_col1:
+        if st.button("◂", key="range_prev", use_container_width=True):
+            st.session_state.range_idx = max(0, st.session_state.range_idx - 1)
+    with r_col3:
+        if st.button("▸", key="range_next", use_container_width=True):
+            st.session_state.range_idx = min(len(range_values) - 1, st.session_state.range_idx + 1)
+    with r_col2:
+        range_idx = st.select_slider(
+            "Range",
+            options=list(range(len(range_values))),
+            value=st.session_state.range_idx,
+            format_func=lambda i: f"{range_values[i]:.1f} {units['range']}",
+            label_visibility="collapsed",
+            key="range_slider",
+        )
+    st.session_state.range_idx = range_idx
+
     profile_offset = st.sidebar.slider("Close Time selection", -10, 10, 0)
 
     prof_time_idx = np.clip(time_idx + profile_offset, 0, len(time_values)-1)
@@ -742,7 +796,7 @@ def main():
             else:
                 lutPath = lut_path_snow
                 sim_label = "Simulated (Snow)"
-            vel_sim, sim_H, PSD, D = radar_simulator.simulate_spectrum(
+            vel_sim, sim_H, PSD, D, precip_rate = radar_simulator.simulate_spectrum(
                 vel_bins=vel_bins,
                 center_height=center_height,
                 eps_diss=eps_diss,
@@ -758,6 +812,7 @@ def main():
                 vertical_wind=vertical_wind,
                 freq_ghz = freq_ghz,
             )
+            print(precip_rate)
             fig5.add_trace(
                 go.Scattergl(
                     x=vel_sim,
@@ -771,7 +826,7 @@ def main():
             grid_gray_major = "rgba(77,77,77,0.45)"
             fig5.update_layout(
                 xaxis_title=f"Velocity ({units['velocity']})",
-                yaxis_title=f"{var} ({get_units_from_attrs(ds_mom[var])})",
+                yaxis_title=f"{spec_var} ({spectrum_unit})" if spectrum_unit else spec_var,
                 height=450,
                 margin=dict(l=20, r=20, t=40, b=20),
                 font=dict(size=20, color=dark_gray),
@@ -860,6 +915,17 @@ def main():
             yanchor="bottom",
             showarrow=False,
             font=dict(size=25, color="#4d4d4d"),
+        )
+        fig6.add_annotation(
+            text=f"R = {precip_rate:.2e} mm/h",
+            x=0.98,
+            xref="paper",
+            y=0.97,
+            yref="paper",
+            xanchor="right",
+            yanchor="top",
+            showarrow=False,
+            font=dict(size=20, color="#4d4d4d"),
         )
         fig6.update_xaxes(
             showgrid=True,

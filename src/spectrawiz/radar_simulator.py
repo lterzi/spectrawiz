@@ -66,6 +66,38 @@ def _centers_to_edges(vel_centers):
     first = vc[0] - 0.5 * (vc[1] - vc[0])
     last = vc[-1] + 0.5 * (vc[-1] - vc[-2])
     return np.concatenate([[first], mids, [last]])
+def precipitation_rate_from_psd(D_mm, PSD, v_fall, mass):
+    """
+    Compute liquid-equivalent precipitation rate from a particle size distribution.
+
+    Parameters
+    ----------
+    D_mm : array-like
+        Particle diameter / maximum dimension in mm.
+    PSD : array-like
+        N(D) in m^-3 mm^-1.
+    v_fall : array-like
+        Terminal fall velocities in m/s (positive downward).
+    mass : array-like
+        Particle masses in kg. For rain: (pi/6) * rho_w * D^3.
+
+    Returns
+    -------
+    R : float
+        Precipitation rate in mm/h liquid water equivalent.
+    """
+    D_mm = np.asarray(D_mm, dtype=float)
+    PSD = np.asarray(PSD, dtype=float)
+    v_fall = np.abs(np.asarray(v_fall, dtype=float))
+    mass_kg = np.asarray(mass, dtype=float)
+
+    integrand = mass_kg * v_fall * PSD
+    flux_kg = np.trapezoid(integrand, D_mm)
+
+    rho_w = 1000.0  # kg/m^3
+    R_mm_per_h = (flux_kg / rho_w) * 1e3 * 3600.0
+    return R_mm_per_h
+
 
 def simulate_spectrum(
     vel_bins,
@@ -126,6 +158,15 @@ def simulate_spectrum(
         cbck = _pick_var(lut, ["Cbck", "c_bck_h", "radarXSh[mm2]"]).values
     except KeyError as e:
         raise RuntimeError(f"Missing required LUT variable: {e}")
+    try:
+        mass = _pick_var(lut, ["mass", "m"]).values
+    except KeyError as e:
+        if "aspect_ratio" in lut.coords:
+            aspect_ratio = lut.coords["aspect_ratio"].values
+            mass = (np.pi / 6.0) * 1000.0 * (D ** 3) * aspect_ratio
+        else:
+            mass = (np.pi / 6.0) * 1000.0 * (D ** 3)  # assume density of water
+        #raise RuntimeError(f"Missing required LUT variable: {e}")
        
         
 
@@ -162,6 +203,8 @@ def simulate_spectrum(
     spec_H = _convolve_broad_fft(spec_H, vel_centers, spec_broad)
     #print(f"[simulate_snow] spec_H after broadening range: {spec_H.min():.4e} to {spec_H.max():.4e}")
     spec_H = _convolve_noise(spec_H, vel_centers, noise_pow, nave)
+
+    precip_rate = precipitation_rate_from_psd(D, PSD, v_lut, mass)
     #print(D)
     
-    return vel_centers, _dB(spec_H), PSD, D
+    return vel_centers, _dB(spec_H), PSD, D, precip_rate
