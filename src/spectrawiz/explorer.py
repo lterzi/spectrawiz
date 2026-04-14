@@ -122,6 +122,15 @@ def main():
         st.session_state.time_idx = len(time_values) // 2
     if "range_idx" not in st.session_state:
         st.session_state.range_idx = len(range_values) // 2
+    if "box_xlim" not in st.session_state:
+        st.session_state.box_xlim = None
+    if "box_ylim" not in st.session_state:
+        st.session_state.box_ylim = None
+    for _pkey in ["p2", "p3"]:
+        if f"box_xlim_{_pkey}" not in st.session_state:
+            st.session_state[f"box_xlim_{_pkey}"] = None
+        if f"box_ylim_{_pkey}" not in st.session_state:
+            st.session_state[f"box_ylim_{_pkey}"] = None
 
     # Custom CSS for compact step buttons
     st.sidebar.markdown(
@@ -184,10 +193,7 @@ def main():
         )
     st.session_state.range_idx = range_idx
 
-    profile_offset = st.sidebar.slider("Close Time selection", -10, 10, 0)
-
-    prof_time_idx = np.clip(time_idx + profile_offset, 0, len(time_values)-1)
-    profile_time_str = pd.to_datetime(time_values[prof_time_idx]).strftime('%H:%M')
+    prof_time_idx = time_idx
 
     # --- Display/Units/Colorbar config dictionary (can override defaults) ---
     with st.sidebar.expander("Display Options"):
@@ -236,13 +242,20 @@ def main():
             key="panel3_colorbar_limits",
         )
 
+        st.markdown("---")
+        st.markdown("**Panel 5 (Meas. & Sim. Spectrum)**")
+        panel5_xlimits = st.text_input("X-axis limits (e.g. -4,2)", "", key="panel5_xlimits")
+        panel5_ylimits = st.text_input("Y-axis limits (e.g. -40,10)", "", key="panel5_ylimits")
+
         xlimits = {
             "panel1": panel1_xlimits,
             "panel3": panel3_xlimits,
+            "panel5": panel5_xlimits,
         }
         ylimits = {
             "panel1": panel1_ylimits,
             "panel3": panel3_ylimits,
+            "panel5": panel5_ylimits,
         }
         colorbar_limits = {
             "panel1": panel1_colorbar_limits,
@@ -443,12 +456,16 @@ def main():
     time_values_disp = pd.to_datetime(ds_mom[time_var].values)
     y_disp = ds_mom[range_var].values
 
+    # Merge box selection with text-input limits (box selection takes priority)
+    _effective_xrange = st.session_state.box_xlim or xlim["panel1"]
+    _effective_yrange = st.session_state.box_ylim or ylim["panel1"]
+
     z_panel1, time_panel1, y_panel1 = subset_heatmap(
         z_disp,
         time_values_disp,
         y_disp,
-        x_range=xlim["panel1"],
-        y_range=ylim["panel1"],
+        x_range=_effective_xrange,
+        y_range=_effective_yrange,
     )
 
     z_ds, x_ds, y_ds, sx, sy = downsample_heatmap(
@@ -478,7 +495,8 @@ def main():
         yaxis_title=f"Range ({units['range']})",
         height=450,
         margin=dict(l=20, r=20, t=80, b=20),
-        font=dict(size=20, color=dark_gray)
+        font=dict(size=20, color=dark_gray),
+        dragmode="select",
     )
     fig1.add_annotation(
         text=f"<b>Time x Range {var}</b>",
@@ -492,13 +510,40 @@ def main():
         font=dict(size=25, color="#4d4d4d"),
     )
 
+    # Adaptive tick spacing based on visible time range
+    _vis_xlim = st.session_state.box_xlim or xlim.get("panel1")
+    if _vis_xlim:
+        _dt_seconds = (pd.Timestamp(_vis_xlim[1]) - pd.Timestamp(_vis_xlim[0])).total_seconds()
+    else:
+        _dt_seconds = (time_values_disp[-1] - time_values_disp[0]).total_seconds()
+    if _dt_seconds < 600:           # < 10 min
+        _major_dtick = 60 * 1000
+        _minor_dtick = 15 * 1000
+        _tfmt = "%H:%M:%S"
+    elif _dt_seconds < 3600:        # < 1 h
+        _major_dtick = 10 * 60 * 1000
+        _minor_dtick = 2 * 60 * 1000
+        _tfmt = "%H:%M"
+    elif _dt_seconds < 3 * 3600:    # < 3 h
+        _major_dtick = 30 * 60 * 1000
+        _minor_dtick = 10 * 60 * 1000
+        _tfmt = "%H:%M"
+    elif _dt_seconds < 12 * 3600:   # < 12 h
+        _major_dtick = 1 * 60 * 60 * 1000
+        _minor_dtick = 15 * 60 * 1000
+        _tfmt = "%H:%M"
+    else:
+        _major_dtick = 3 * 60 * 60 * 1000
+        _minor_dtick = 60 * 60 * 1000
+        _tfmt = "%H:%M"
+
     fig1.update_xaxes(
-        range=list(xlim["panel1"]) if xlim["panel1"] else None,
+        autorange=True,
         showgrid=True,
         gridcolor=grid_gray_major,
         gridwidth=1.2,
-        tickformat="%H:%M",
-        dtick=3 * 60 * 60 * 1000,
+        tickformat=_tfmt,
+        dtick=_major_dtick,
         ticks="outside",
         ticklen=9,
         tickwidth=1.6,
@@ -510,7 +555,7 @@ def main():
         linewidth=1.5,
         mirror=True,
         minor=dict(
-            dtick=60 * 60 * 1000,
+            dtick=_minor_dtick,
             ticks="outside",
             ticklen=5,
             tickwidth=1.2,
@@ -522,7 +567,7 @@ def main():
     )
 
     fig1.update_yaxes(
-        range=list(ylim["panel1"]) if ylim["panel1"] else None,
+        autorange=True,
         showgrid=True,
         gridcolor=grid_gray_major,
         gridwidth=1.2,
@@ -544,10 +589,32 @@ def main():
         font=dict(size=18, color=dark_gray)
     )
     fig1.data[0].colorbar.tickfont = dict(size=16, color=dark_gray)
-    fig1.add_vline(x=time_values_disp[time_idx], line_dash="dash", line_color="red")
-    fig1.add_hline(y=y_disp[range_idx], line_dash="dash", line_color="red")
 
-    st.plotly_chart(fig1, use_container_width=True, config={"displaylogo": False})
+    # Clip crosshairs to the visible data range
+    _vline_time = time_values_disp[time_idx]
+    _hline_range = y_disp[range_idx]
+    if time_panel1[0] <= _vline_time <= time_panel1[-1]:
+        fig1.add_vline(x=_vline_time, line_dash="dash", line_color="red")
+    if y_panel1[0] <= _hline_range <= y_panel1[-1]:
+        fig1.add_hline(y=_hline_range, line_dash="dash", line_color="red")
+
+    event = st.plotly_chart(
+        fig1, use_container_width=True,
+        config={"displaylogo": False},
+        on_select="rerun",
+        key="panel1_select",
+    )
+    if event and event.selection and event.selection.get("box"):
+        box = event.selection["box"][0]
+        st.session_state.box_xlim = (min(box["x"]), max(box["x"]))
+        st.session_state.box_ylim = (min(box["y"]), max(box["y"]))
+        st.rerun()
+
+    if st.session_state.box_xlim or st.session_state.box_ylim:
+        if st.button("Reset zoom", key="reset_panel1_zoom"):
+            st.session_state.box_xlim = None
+            st.session_state.box_ylim = None
+            st.rerun()
 
     # --- Row 2: Three columns for panels 2, 3, 4 ---
     col1, col2, col3 = st.columns(3)
@@ -573,6 +640,7 @@ def main():
             margin=dict(l=20, r=20, t=40, b=20),
             font=dict(size=14, color=dark_gray),
             showlegend=False,
+            dragmode="select",
         )
         fig2.add_annotation(
             text=f"<b>Profile at {pd.to_datetime(time_values[time_idx]).strftime('%H:%M')} </b>",
@@ -611,7 +679,21 @@ def main():
             mirror=True,
             tickformat=".0f"
         )
-        st.plotly_chart(fig2, use_container_width=True, config={"displaylogo": False})
+        if st.session_state.box_xlim_p2:
+            fig2.update_xaxes(range=list(st.session_state.box_xlim_p2))
+        if st.session_state.box_ylim_p2:
+            fig2.update_yaxes(range=list(st.session_state.box_ylim_p2))
+        ev2 = st.plotly_chart(fig2, use_container_width=True, config={"displaylogo": False}, on_select="rerun", key="panel2_select")
+        if ev2 and ev2.selection and ev2.selection.get("box"):
+            b = ev2.selection["box"][0]
+            st.session_state.box_xlim_p2 = (min(b["x"]), max(b["x"]))
+            st.session_state.box_ylim_p2 = (min(b["y"]), max(b["y"]))
+            st.rerun()
+        if st.session_state.box_xlim_p2 or st.session_state.box_ylim_p2:
+            if st.button("Reset zoom", key="reset_p2"):
+                st.session_state.box_xlim_p2 = None
+                st.session_state.box_ylim_p2 = None
+                st.rerun()
 
     with col2:
         vel, rng, specgram = load_spectrogram(files, ds_mom, prof_time_idx, spec_var)
@@ -645,6 +727,7 @@ def main():
                 height=450,
                 margin=dict(l=20, r=20, t=40, b=20),
                 font=dict(size=20, color=dark_gray),
+                dragmode="select",
             )
             fig3.add_annotation(
                 text=f"<b>Spectrogram at {pd.to_datetime(time_values[time_idx]).strftime('%H:%M')} </b>",
@@ -696,7 +779,21 @@ def main():
                 font=dict(size=18, color=dark_gray)
             )
             fig3.data[0].colorbar.tickfont = dict(size=16, color=dark_gray)
-            st.plotly_chart(fig3, width='stretch', config={"displaylogo": False})
+            if st.session_state.box_xlim_p3:
+                fig3.update_xaxes(range=list(st.session_state.box_xlim_p3))
+            if st.session_state.box_ylim_p3:
+                fig3.update_yaxes(range=list(st.session_state.box_ylim_p3))
+            ev3 = st.plotly_chart(fig3, width='stretch', config={"displaylogo": False}, on_select="rerun", key="panel3_select")
+            if ev3 and ev3.selection and ev3.selection.get("box"):
+                b = ev3.selection["box"][0]
+                st.session_state.box_xlim_p3 = (min(b["x"]), max(b["x"]))
+                st.session_state.box_ylim_p3 = (min(b["y"]), max(b["y"]))
+                st.rerun()
+            if st.session_state.box_xlim_p3 or st.session_state.box_ylim_p3:
+                if st.button("Reset zoom", key="reset_p3"):
+                    st.session_state.box_xlim_p3 = None
+                    st.session_state.box_ylim_p3 = None
+                    st.rerun()
 
     with col3:
         vel, spectrum = load_spectrum(files, ds_mom, prof_time_idx, range_idx, spec_var)
@@ -882,6 +979,18 @@ def main():
                 linewidth=1.5,
                 mirror=True,
             )
+            if xlimits.get("panel5"):
+                try:
+                    xlo, xhi = [float(v) for v in xlimits["panel5"].split(",")]
+                    fig5.update_xaxes(range=[xlo, xhi])
+                except Exception:
+                    pass
+            if ylimits.get("panel5"):
+                try:
+                    ylo, yhi = [float(v) for v in ylimits["panel5"].split(",")]
+                    fig5.update_yaxes(range=[ylo, yhi])
+                except Exception:
+                    pass
             st.plotly_chart(fig5, width="content", config={"displaylogo": False})
 
     with col6:
@@ -1072,7 +1181,11 @@ def main():
     - Panel 4 shows the spectrum at the selected time and range.
     - Panel 5 compares the measured spectrum with the simulated spectrum based on the selected parameters. Use the controls in the "Simulation Parameters" sidebar to adjust the gamma DSD parameters and see how the simulated spectrum changes.
     - Panel 6 shows the simulated PSD based on the gamma DSD parameters.
-    The Display Options allow you to customize the colormaps and colorbar limits for panels 1 and 3.
+                
+    - The Display Options allow you to customize the colormaps and colorbar limits for panels 1 and 3.
+    - Panel 1 allows you to select a specific time-range region by dragging a box. Click "Reset zoom" to clear the selection. Alternatively you can set the axis limits manually using the text inputs in the sidebar Display Options.
+    - Panel 2 and 3 also allow box selection to zoom in on specific velocity or range intervals. Use the "Reset zoom" buttons to clear those selections.
+    
     """)
 
 if __name__ == "__main__":
