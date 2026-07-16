@@ -16,15 +16,17 @@ import xarray as xr
 from .backends import (
     MetekBackend,
     RPGBackend,
+    MRRBackend,
     available_backends,
     register_backend,
     select_backend,
 )
 
-RadarType = Literal["auto", "metek", "rpg"]
+RadarType = Literal["auto", "metek", "rpg", "mrr"]
 
 register_backend(MetekBackend(), overwrite=True)
 register_backend(RPGBackend(), overwrite=True)
+register_backend(MRRBackend(), overwrite=True)
 
 
 def detect_radar_type(ds: xr.Dataset) -> str:
@@ -223,6 +225,63 @@ def _write_ds(ds: xr.Dataset, path: Path, compress: bool = True) -> None:
     ds.to_netcdf(path, mode="w", encoding=encoding)
 
 
+def _filter_files_by_date(
+    files: list[str],
+    start: str | None,
+    end: str | None,
+) -> list[str]:
+    """Filter a file list to those whose filename contains a YYYYMMDD date within [start, end]."""
+    if start is None and end is None:
+        return files
+    date_re = re.compile(r"(\d{8})")
+    t_start = pd.Timestamp(start) if start else None
+    t_end = pd.Timestamp(end) if end else None
+    result = []
+    for f in files:
+        m = date_re.search(Path(f).name)
+        if not m:
+            result.append(f)
+            continue
+        try:
+            file_date = pd.Timestamp(m.group(1))
+        except Exception:
+            result.append(f)
+            continue
+        if t_start is not None and file_date < t_start:
+            continue
+        if t_end is not None and file_date > t_end:
+            continue
+        result.append(f)
+    return result
+
+
+def _load_preprocessing_datasets(
+    preprocessing_path: str | Path | None,
+    preprocessing_pattern: str = "*.nc",
+    preprocessing_start: str | None = None,
+    preprocessing_end: str | None = None,
+    debugging: bool = False,
+) -> list[xr.Dataset]:
+    """Load datasets from preprocessing_path to use for campaign-wide preprocessing."""
+    if preprocessing_path is None:
+        return []
+    prep_files = sorted(glob.glob(str(Path(preprocessing_path) / "**" / preprocessing_pattern), recursive=True))
+    prep_files = _filter_files_by_date(prep_files, preprocessing_start, preprocessing_end)
+    if debugging:
+        print(f"Preprocessing: found {len(prep_files)} files in {preprocessing_path}"
+              + (f" between {preprocessing_start} and {preprocessing_end}" if preprocessing_start or preprocessing_end else ""))
+    datasets = []
+    for f in prep_files:
+        try:
+            ds = xr.open_dataset(f)
+            ds = _normalize_time_name(ds)
+            datasets.append(ds)
+        except Exception as e:
+            if debugging:
+                print(f"Warning: could not read preprocessing file {Path(f).name}: {e}")
+    return datasets
+
+
 def _merge_process_regrid_hour(
     hour_files: list[str],
     *,
@@ -236,6 +295,8 @@ def _merge_process_regrid_hour(
     regrid_time: bool = True,
     time_step: str = "4s",
     regrid_tolerance: str | None = None,
+    preprocessing_datasets: list[xr.Dataset] | None = None,
+    preprocessing_spectra_q=None,
     debugging: bool = False,
 ) -> xr.Dataset | None:
     parts: list[xr.Dataset] = []
@@ -288,6 +349,8 @@ def _merge_process_regrid_hour(
             include_moments=include_moments,
             include_ldr=include_ldr,
             include_pol=include_pol,
+            preprocessing_datasets=preprocessing_datasets or [],
+            preprocessing_spectra_q=preprocessing_spectra_q,
         )
     except TypeError:
         ds_proc = backend.process(
@@ -326,6 +389,10 @@ def process_day(
     regrid_time: bool = True,
     time_step: str = "4s",
     regrid_tolerance: str | None = None,
+    preprocessing_path: str | Path | None = None,
+    preprocessing_pattern: str = "*.nc",
+    preprocessing_start: str | None = None,
+    preprocessing_end: str | None = None,
     debugging: bool = False,
 ) -> list[Path]:
     date2proc = pd.Timestamp(date).normalize()
@@ -353,6 +420,16 @@ def process_day(
         raise ValueError(f"Could not detect backend for valid files in {raw_path}")
 
     vars_to_keep = _vars_for_backend(backend.name)
+    prep_datasets = _load_preprocessing_datasets(
+        preprocessing_path, preprocessing_pattern, preprocessing_start, preprocessing_end, debugging
+    )
+    # Pre-compute spectra_q once so it isn't recomputed on every backend.process() call.
+    preprocessing_spectra_q = None
+    if prep_datasets and hasattr(backend, "compute_preprocessing_spectra_q"):
+        if debugging:
+            print("Preprocessing: computing spectra_q from preprocessing files (once)...")
+        preprocessing_spectra_q = backend.compute_preprocessing_spectra_q(prep_datasets)
+
     written: list[Path] = []
 
     if not hourly:
@@ -389,6 +466,8 @@ def process_day(
                             include_moments=include_moments,
                             include_ldr=include_ldr,
                             include_pol=include_pol,
+                            preprocessing_datasets=prep_datasets,
+                            preprocessing_spectra_q=preprocessing_spectra_q,
                         )
                     except TypeError:
                         ds_proc = backend.process(
@@ -449,6 +528,8 @@ def process_day(
                 regrid_time=regrid_time,
                 time_step=time_step,
                 regrid_tolerance=regrid_tolerance,
+                preprocessing_datasets=prep_datasets,
+                preprocessing_spectra_q=preprocessing_spectra_q,
                 debugging=debugging,
             )
 
@@ -508,7 +589,7 @@ def main():
     parser.add_argument("--raw_path", required=True, help="Path to raw radar files")
     parser.add_argument("--output_dir", required=True, help="Directory to write processed files")
     parser.add_argument("--file_pattern", default="*.nc", help="Glob pattern for raw files")
-    parser.add_argument("--radar_type", default="auto", choices=["auto", "metek", "rpg"])
+    parser.add_argument("--radar_type", default="auto", choices=["auto", "metek", "rpg", "mrr"])
     parser.add_argument("--include_moments", action="store_true")
     parser.add_argument("--include_ldr", action="store_true")
     parser.add_argument("--include_pol", action="store_true")
@@ -516,6 +597,27 @@ def main():
     parser.add_argument("--regrid_time", action="store_true")
     parser.add_argument("--time_step", default="4s")
     parser.add_argument("--regrid_tolerance", default=None)
+    parser.add_argument(
+        "--preprocessing_path", default=None,
+        help="Directory of raw files to use for campaign-wide preprocessing (MRR backend only). "
+             "When set, the interference mask and border correction are estimated from all files "
+             "in this directory rather than from the current file only. "
+             "Subdirectories are searched recursively. "
+             "Tip: use clear-sky files to avoid precipitation contaminating the interference mask.",
+    )
+    parser.add_argument(
+        "--preprocessing_pattern", default="*.nc",
+        help="Glob pattern for files in --preprocessing_path (default: *.nc)",
+    )
+    parser.add_argument(
+        "--preprocessing_start", default=None,
+        help="Start date (YYYYMMDD) for filtering files in --preprocessing_path. "
+             "Files are matched by the YYYYMMDD date string in their filename.",
+    )
+    parser.add_argument(
+        "--preprocessing_end", default=None,
+        help="End date (YYYYMMDD) for filtering files in --preprocessing_path.",
+    )
     parser.add_argument("--debugging", action="store_true")
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
@@ -533,6 +635,10 @@ def main():
         regrid_time=args.regrid_time,
         time_step=args.time_step,
         regrid_tolerance=args.regrid_tolerance,
+        preprocessing_path=args.preprocessing_path,
+        preprocessing_pattern=args.preprocessing_pattern,
+        preprocessing_start=args.preprocessing_start,
+        preprocessing_end=args.preprocessing_end,
         debugging=args.debugging,
         overwrite=args.overwrite,
     )

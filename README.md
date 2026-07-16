@@ -25,11 +25,12 @@ It is designed for atmospheric radar scientists and engineers, providing both a 
 
 ### 3. **Raw Radar Data Processing**
 - High-level command-line tool to process raw radar files by day.
-- Supports multiple radar backends (Metek, RPG, auto-detection).
+- Supports multiple radar backends (Metek, RPG, MRR-PRO, auto-detection).
 - Hourly or file-based processing, with optional time regridding.
 - Handles moments, LDR, and polarimetric variables.
 - Smart file skipping and overwrite options.
 - Debugging output for batch processing.
+- MRR-PRO backend: campaign-wide or user-defined preprocessing period for accurate interference masking.
 
 ### 4. **Modular Python Package**
 - Clean `src/`-layout package for easy import and extension.
@@ -84,6 +85,74 @@ Use in your own scripts or notebooks:
 from spectrawiz.process_data import process_day
 written = process_day(date="20250910", raw_path="...", output_dir="...")
 ```
+
+---
+
+## MRR-PRO Backend
+
+SpectraWiz includes a full MRR-PRO processing backend (`--radar_type mrr`) that re-implements the [ERUO](https://github.com/alfonso-ferrone/ERUO) algorithm in a single in-memory pass: preprocessing (interference mask + border correction), spectrum reconstruction, per-spectrum processing, and postprocessing.
+
+### Preprocessing period
+
+The interference mask is estimated from the **median spectrum** across a set of input files. If the processing file itself contains precipitation, that signal can contaminate the median and be mistakenly flagged as interference — causing echoes to be reconstructed away (see the section below).
+
+To avoid this, you can point the backend at a separate set of **clear-sky files** from the same campaign. The interference lines are fixed features of the instrument and site, so they appear in both clear-sky and precipitation data; precipitation is not needed to identify them.
+
+**Command-line:**
+
+```bash
+# Process 10 June 2026, using all of June as the preprocessing period
+spectrawiz-process \
+  --date 20260610 \
+  --raw_path /data/mrr/raw/202606/20260610 \
+  --output_dir /data/mrr/processed \
+  --radar_type mrr \
+  --hourly \
+  --preprocessing_path /data/mrr/raw \
+  --preprocessing_start 20260601 \
+  --preprocessing_end 20260609
+
+# Or use a specific clear-sky day only
+spectrawiz-process \
+  --date 20260610 \
+  --raw_path /data/mrr/raw/202606/20260610 \
+  --output_dir /data/mrr/processed \
+  --radar_type mrr \
+  --hourly \
+  --preprocessing_path /data/mrr/raw \
+  --preprocessing_start 20260605 \
+  --preprocessing_end 20260605
+```
+
+`--preprocessing_path` is searched **recursively**, so pointing it at the campaign root (e.g. `/data/mrr/raw/`) with `YYYYMM/YYYYMMDD/` subfolders works directly.
+
+`--preprocessing_start` / `--preprocessing_end` filter by the `YYYYMMDD` date string found in each filename. Both are optional — omit them to use all files found under `--preprocessing_path`.
+
+**Python API:**
+
+```python
+from spectrawiz.process_data import process_day
+
+process_day(
+    "20260610",
+    raw_path="/data/mrr/raw/202606/20260610",
+    output_dir="/data/mrr/processed",
+    radar_type="mrr",
+    hourly=True,
+    preprocessing_path="/data/mrr/raw",
+    preprocessing_start="20260601",
+    preprocessing_end="20260609",
+)
+```
+
+### Why clear-sky preprocessing matters
+
+The MRR-PRO backend estimates the interference mask by:
+1. Computing the **median spectrum** across all preprocessing files (collapsed in time).
+2. Fitting a smooth noise-floor profile to it.
+3. Flagging anything that stands above that profile as interference.
+
+If rain or snow is present in most preprocessing time steps, the precipitation signal ends up in the median and gets flagged as interference. The processing then reconstructs those bins from the background, removing the real echo. Using a clear-sky period for preprocessing ensures only actual RFI and instrument artefacts are masked.
 
 ---
 

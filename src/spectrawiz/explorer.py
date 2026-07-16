@@ -57,16 +57,16 @@ def main():
 
     # --- User Inputs ---
     datapath = st.sidebar.text_input("Data directory", "processed/")
-    date = st.sidebar.text_input("Date (YYYY-MM-DD)", "2025-09-10")
+    #date = st.sidebar.text_input("Date (YYYY-MM-DD)", "2025-09-10")
     pattern = st.sidebar.text_input("File pattern", "*rpg_hourly_proc.nc")
 
-    def find_files(datapath, date, pattern):
-        y, m, d = date.split("-")
+    def find_files(datapath, pattern):
+        #y, m, d = date.split("-")
         search_path = os.path.join(datapath, pattern)
         files = sorted(glob.glob(search_path))
         return files
 
-    files = find_files(datapath, date, pattern)
+    files = find_files(datapath, pattern)
     if not files:
         st.error("No files found for the selected date and pattern.")
         st.stop()
