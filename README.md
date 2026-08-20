@@ -3,6 +3,9 @@
 **SpectraWiz** is a modular Python package for interactive radar spectra exploration, forward simulation, and raw radar data processing.  
 It is designed for atmospheric radar scientists and engineers, providing both a user-friendly Streamlit web app and powerful command-line and Python APIs.
 
+![SpectraWiz Explorer](docs/streamlit_ex.png)
+
+
 ---
 
 ## Features
