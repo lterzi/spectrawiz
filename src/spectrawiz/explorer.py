@@ -234,11 +234,11 @@ def main():
         )
 
         panel1_xlimits = st.text_input(
-            "X-axis limits (e.g. 06:00,12:00 or 2025-09-10 06:00,2025-09-10 12:00)",
+            "Panel 1 X-axis limits (e.g. 06:00,12:00 or 2025-09-10 06:00,2025-09-10 12:00)",
             "",
             key="panel1_xlimits",
         )
-        panel1_ylimits = st.text_input("Y-axis limits (e.g. 0,3000)", "", key="panel1_ylimits")
+        panel1_ylimits = st.text_input("Panel 1 Y-axis limits (e.g. 0,3000)", "", key="panel1_ylimits")
         selected_cmap_panel1 = st.selectbox(
             "Colormap",
             options=mpl_cmaps,
@@ -246,13 +246,13 @@ def main():
             key="panel1_cmap",
         )
         panel1_colorbar_limits = st.text_input(
-            "Colorbar limits (e.g. 0,30)",
+            "Panel 1 Colorbar limits (e.g. 0,30)",
             "",
             key="panel1_colorbar_limits",
         )
 
-        panel3_xlimits = st.text_input("X-axis limits (e.g. -10,10)", "", key="panel3_xlimits")
-        panel3_ylimits = st.text_input("Y-axis limits (e.g. 0,3000)", "", key="panel3_ylimits")
+        panel3_xlimits = st.text_input("Panel 3 X-axis limits (e.g. -10,10)", "", key="panel3_xlimits")
+        panel3_ylimits = st.text_input("Panel 3 Y-axis limits (e.g. 0,3000)", "", key="panel3_ylimits")
         selected_cmap_panel3 = st.selectbox(
             "Colormap",
             options=mpl_cmaps,
@@ -260,15 +260,15 @@ def main():
             key="panel3_cmap",
         )
         panel3_colorbar_limits = st.text_input(
-            "Colorbar limits (e.g. 0,1)",
+            "Panel 3 Colorbar limits (e.g. 0,1)",
             "",
             key="panel3_colorbar_limits",
         )
 
         st.markdown("---")
         st.markdown("**Panel 5 (Meas. & Sim. Spectrum)**")
-        panel5_xlimits = st.text_input("X-axis limits (e.g. -4,2)", "", key="panel5_xlimits")
-        panel5_ylimits = st.text_input("Y-axis limits (e.g. -40,10)", "", key="panel5_ylimits")
+        panel5_xlimits = st.text_input("Panel 5 X-axis limits (e.g. -4,2)", "", key="panel5_xlimits")
+        panel5_ylimits = st.text_input("Panel 5 Y-axis limits (e.g. -40,10)", "", key="panel5_ylimits")
 
         xlimits = {
             "panel1": panel1_xlimits,
