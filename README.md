@@ -34,6 +34,8 @@ It is designed for atmospheric radar scientists and engineers, providing both a 
 - Smart file skipping and overwrite options.
 - Debugging output for batch processing.
 - MRR-PRO backend: campaign-wide or user-defined preprocessing period for accurate interference masking.
+- Spectral dealiasing of Ka-band (Metek MIRA) Doppler spectra, anchored to a co-located X-band radar (`--dealias_method ridge`).
+- Restrict hourly processing to a time window (`--start_time` / `--end_time`).
 
 ### 4. **Modular Python Package**
 - Clean `src/`-layout package for easy import and extension.
@@ -159,12 +161,49 @@ If rain or snow is present in most preprocessing time steps, the precipitation s
 
 ---
 
+## Ka-band Spectrum Dealiasing
+
+For strongly convective cases where a Ka-band (Metek MIRA) cloud radar's Doppler spectra are
+folded beyond its Nyquist velocity, `--dealias_method ridge` dealiases the spectra **bin by
+bin**, using a co-located X-band radar with a much larger Nyquist velocity as reference. It
+tracks the dominant and a second population through the spectrogram, cuts between them at
+spectral minima, corrects jumps by whole Nyquist intervals and fixes the absolute fold against
+the X-band ridge. The method was developed and validated on 2025-06-04, 18:00–18:10 UTC; it is
+not a general-purpose dealiasing algorithm.
+
+```bash
+spectrawiz-process --date 20250604 --raw_path /project/meteo/data/kamacs/mom/2025/06/04/ \
+  --output_dir /scratch/<user>/radar_processed/ --hourly --include_moments --include_ldr \
+  --file_pattern '20250604_18*.znc' \
+  --dealias_method ridge \
+  --dealias_ref_pattern '/project/meteo/data/xmacs/mom/2025/06/04/20250604_18*.znc' \
+  --start_time 18:00 --end_time 18:10 --dealias_n_jobs 4 --overwrite
+```
+
+- `--dealias_ref_pattern` points to the **raw** X-band spectra files.
+- `--start_time` / `--end_time` restrict processing to a time window; the output file name
+  gets the window as suffix (e.g. `20250604_18_metek_hourly_proc_180000-181000.nc`).
+- `--dealias_n_jobs` runs time steps in parallel (≈ 15 s per time step and process).
+
+The spectra (`sZeCo`, `sZeCx`, `sLDR`) are written on an extended velocity axis. All bins are
+kept; `dealias_in_window` marks the bins assigned to a detected population. `MDV_*` and
+`WIDTH_*` are recomputed from the dealiased spectrum, and `dealias_ridge1`, `dealias_ridge2`,
+`dealias_fold_shift`, `dealias_global_shift` and `dealias_status` describe what the method did
+at each time step.
+
+See [docs/dealiasing_ka_ridge.md](docs/dealiasing_ka_ridge.md) for all steps, parameters,
+validation and known limitations.
+
+---
+
 ## Project Structure
 
 ```
 spectrawiz/
 ├── pyproject.toml
 ├── README.md
+├── docs/
+│   └── dealiasing_ka_ridge.md
 ├── src/
 │   └── spectrawiz/
 │       ├── __init__.py
@@ -172,10 +211,12 @@ spectrawiz/
 │       ├── radar_simulator.py
 │       ├── process_data.py
 │       ├── processing_common.py
+│       ├── dealias_ridge.py
 │       └── backends/
 │           ├── __init__.py
 │           ├── base.py
 │           ├── metek.py
+│           ├── mrr.py
 │           ├── rpg.py
 │           └── registry.py
 └── tests/
