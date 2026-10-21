@@ -119,7 +119,7 @@ class MetekBackend(RadarBackend):
                 )
 
         if include_ldr and ("sZeCo" in out) and ("sZeCx" in out):
-            out = xr.merge([out, compute_ldr(out["sZeCo"], out["sZeCx"], vel_dim="Vel")])
+            out = xr.merge([out, compute_ldr(spec_co=out["sZeCo"], spec_cx=out["sZeCx"], vel_dim="Vel")])
 
         out = add_standard_variable_attrs(out)
         # out = ensure_datetime_time(out, time_var="time")

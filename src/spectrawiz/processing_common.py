@@ -124,23 +124,31 @@ def compute_spectral_moments(
 
 
 def compute_ldr(
-    spec_h: xr.DataArray,
-    spec_v: xr.DataArray,
+    spec_co: xr.DataArray,
+    spec_cx: xr.DataArray,
     vel_dim: str = "Vel",
 ) -> xr.Dataset:
     """
-    Returns:
-      - LDR  = 10*log10(ZeH/ZeV)
-      - sLDR = 10*log10(sZeH/sZeV)
-    """
-    # Integrated powers
-    ze_h = spec_h.where(np.isfinite(spec_h), 0.0).clip(min=0.0).integrate(vel_dim)
-    ze_v = spec_v.where(np.isfinite(spec_v), 0.0).clip(min=0.0).integrate(vel_dim)
+    Linear depolarization ratio, cross-polar over co-polar:
+      - LDR  = 10*log10(Ze_cx / Ze_co)
+      - sLDR = 10*log10(sZe_cx / sZe_co)
 
-    ldr = (10.0 * np.log10(ze_h / ze_v.where(ze_v > 0))).rename("LDR")
+    Noise-subtracted bins <= 0 are treated as missing (NaN), not as 0, and are
+    skipped when integrating.
+    """
+    co = spec_co.where(np.isfinite(spec_co) & (spec_co > 0))
+    cx = spec_cx.where(np.isfinite(spec_cx) & (spec_cx > 0))
+
+    # Integrated powers: NaN-skipping sum * bin width (integrate() would turn the
+    # whole spectrum NaN as soon as one bin is NaN). All-NaN spectra stay NaN.
+    dv = float(np.abs(np.nanmedian(np.diff(spec_co[vel_dim].values))))
+    ze_co = co.sum(vel_dim, skipna=True, min_count=1) * dv
+    ze_cx = cx.sum(vel_dim, skipna=True, min_count=1) * dv
+
+    ldr = (10.0 * np.log10(ze_cx / ze_co)).rename("LDR")
 
     # Spectral ratio
-    sldr = (10.0 * np.log10(spec_h / spec_v.where(spec_v > 0))).rename("sLDR")
+    sldr = (10.0 * np.log10(cx / co)).rename("sLDR")
 
     return xr.merge([ldr, sldr])
 
