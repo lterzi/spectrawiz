@@ -180,6 +180,17 @@ def main():
 
     if st.session_state.time_idx >= len(time_values):
         st.session_state.time_idx = len(time_values) - 1
+
+    # select_slider maps the selected position back to an option through its label, so
+    # labels must be unique: with minute-only labels every rerun snapped the time to the
+    # last time step of that minute (undoing steps made with the buttons).
+    def _unique_labels(labels):
+        counts = pd.Series(labels).value_counts()
+        return [f"{lab} (#{i})" if counts[lab] > 1 else lab for i, lab in enumerate(labels)]
+
+    time_labels = _unique_labels([pd.to_datetime(t).strftime('%Y-%m-%d %H:%M:%S') for t in time_values])
+    range_labels = _unique_labels([f"{r:.1f} {units['range']}" for r in range_values])
+
     st.sidebar.markdown("**Time**")
     t_col1, t_col2, t_col3 = st.sidebar.columns([1, 8, 1], vertical_alignment="center")
     with t_col1:
@@ -196,7 +207,7 @@ def main():
         time_idx = st.select_slider(
             "Time",
             options=list(range(len(time_values))),
-            format_func=lambda i: pd.to_datetime(time_values[i]).strftime('%Y-%m-%d %H:%M'),
+            format_func=lambda i: time_labels[i],
             label_visibility="collapsed",
             key="time_slider",
         )
@@ -218,7 +229,7 @@ def main():
         range_idx = st.select_slider(
             "Range",
             options=list(range(len(range_values))),
-            format_func=lambda i: f"{range_values[i]:.1f} {units['range']}",
+            format_func=lambda i: range_labels[i],
             label_visibility="collapsed",
             key="range_slider",
         )
