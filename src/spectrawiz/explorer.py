@@ -141,8 +141,10 @@ def main():
     # --- Sliders for selection (always visible and at the top) ---
     if "time_idx" not in st.session_state:
         st.session_state.time_idx = len(time_values) // 2
+        st.session_state["time_slider"] = st.session_state.time_idx
     if "range_idx" not in st.session_state:
         st.session_state.range_idx = len(range_values) // 2
+        st.session_state["range_slider"] = st.session_state.range_idx
     if "box_xlim" not in st.session_state:
         st.session_state.box_xlim = None
     if "box_ylim" not in st.session_state:
@@ -182,15 +184,18 @@ def main():
     t_col1, t_col2, t_col3 = st.sidebar.columns([1, 8, 1], vertical_alignment="center")
     with t_col1:
         if st.button("◂", key="time_prev", use_container_width=True):
-            st.session_state.time_idx = max(0, st.session_state.time_idx - 1)
+            new_val = max(0, st.session_state.time_idx - 1)
+            st.session_state.time_idx = new_val
+            st.session_state["time_slider"] = new_val
     with t_col3:
         if st.button("▸", key="time_next", use_container_width=True):
-            st.session_state.time_idx = min(len(time_values) - 1, st.session_state.time_idx + 1)
+            new_val = min(len(time_values) - 1, st.session_state.time_idx + 1)
+            st.session_state.time_idx = new_val
+            st.session_state["time_slider"] = new_val
     with t_col2:
         time_idx = st.select_slider(
             "Time",
             options=list(range(len(time_values))),
-            value=st.session_state.time_idx,
             format_func=lambda i: pd.to_datetime(time_values[i]).strftime('%Y-%m-%d %H:%M'),
             label_visibility="collapsed",
             key="time_slider",
@@ -201,15 +206,18 @@ def main():
     r_col1, r_col2, r_col3 = st.sidebar.columns([1, 8, 1], vertical_alignment="center")
     with r_col1:
         if st.button("◂", key="range_prev", use_container_width=True):
-            st.session_state.range_idx = max(0, st.session_state.range_idx - 1)
+            new_val = max(0, st.session_state.range_idx - 1)
+            st.session_state.range_idx = new_val
+            st.session_state["range_slider"] = new_val
     with r_col3:
         if st.button("▸", key="range_next", use_container_width=True):
-            st.session_state.range_idx = min(len(range_values) - 1, st.session_state.range_idx + 1)
+            new_val = min(len(range_values) - 1, st.session_state.range_idx + 1)
+            st.session_state.range_idx = new_val
+            st.session_state["range_slider"] = new_val
     with r_col2:
         range_idx = st.select_slider(
             "Range",
             options=list(range(len(range_values))),
-            value=st.session_state.range_idx,
             format_func=lambda i: f"{range_values[i]:.1f} {units['range']}",
             label_visibility="collapsed",
             key="range_slider",
@@ -668,7 +676,7 @@ def main():
             dragmode="select",
         )
         fig2.add_annotation(
-            text=f"<b>Profile at {pd.to_datetime(time_values[time_idx]).strftime('%H:%M')} </b>",
+            text=f"<b>Profile at {pd.to_datetime(time_values[time_idx]).strftime('%H:%M:%S')} </b>",
             x=0.5,
             xref="x domain",
             y=1.01,
@@ -755,7 +763,7 @@ def main():
                 dragmode="select",
             )
             fig3.add_annotation(
-                text=f"<b>Spectrogram at {pd.to_datetime(time_values[time_idx]).strftime('%H:%M')} </b>",
+                text=f"<b>Spectrogram at {pd.to_datetime(time_values[time_idx]).strftime('%H:%M:%S')} </b>",
                 x=0.5,
                 xref="x domain",
                 y=1.01,
