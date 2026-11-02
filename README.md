@@ -47,13 +47,17 @@ It is designed for atmospheric radar scientists and engineers, providing both a 
 
 ## Installation
 
-Clone the repository and install in editable mode:
+Clone the repository, create a virtual environment and install in editable mode:
 
 ```bash
 git clone https://github.com/yourusername/spectrawiz.git
 cd spectrawiz
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -e .
 ```
+
+Activate the environment with `source .venv/bin/activate` in each new shell before using SpectraWiz, and leave it with `deactivate`.
 
 ---
 
