@@ -340,10 +340,15 @@ def main():
 
     # --- Simulation controls in sidebar ---
     with st.sidebar.expander("Simulation Parameters"):
-        simulator_type = st.radio("Hydrometeor Type in Simulation", options=["Snow", "Rain"], index=0)
+        simulator_type = st.radio("Hydrometeor Type in Simulation", options=["Snow", "Rain", "Dry hail", "Wet hail"], index=0)
+        sim_quantity = st.radio("Simulated quantity", options=["Ze", "LDR"], index=0)
         lut_path_rain = st.text_input("Rain LUT path", value="scattering_luts/liquid_LUT.nc")
         lut_path_snow = st.text_input("Snow LUT path", value="scattering_luts/ice_LUT_vonTerzi_dendrite.nc")
-        freq_ghz = st.selectbox("Radar Frequency [GHz]", options=[9.6, 35.6, 94.0], index=2)
+        lut_path_dry_hail = st.text_input("Dry hail LUT path", value="scattering_luts/hail_dry_LUT.nc")
+        lut_path_wet_hail = st.text_input("Wet hail LUT path", value="scattering_luts/hail_wet_LUT.nc")
+        # The hail LUTs have no 94 GHz, and the simulator would silently take the nearest frequency.
+        freq_options = [9.6, 35.6] if "hail" in simulator_type else [9.6, 35.6, 94.0]
+        freq_ghz = st.selectbox("Radar Frequency [GHz]", options=freq_options, index=len(freq_options) - 1)
         gamma = st.slider("Gamma DSD shape parameter (gamma)", min_value=0.0, max_value=5.0, value=0.0, step=0.1)
         log_lam = st.slider("log₁₀(lambda) [m⁻¹]", min_value=1.0, max_value=7.0, value=3.0, step=0.01)
         lam = 10 ** log_lam
@@ -915,29 +920,42 @@ def main():
     col5, col6 = st.columns(2)
 
     with col5:
-        vel, rng, specgram = load_spectrogram(files, ds_mom, prof_time_idx, spec_var)
+        # In LDR mode the measured curve is sLDR, so that both curves share one dB scale.
+        show_measured = sim_quantity == "Ze" or "sLDR" in spec_vars
+        measured_var = "sLDR" if sim_quantity == "LDR" and show_measured else spec_var
+        vel, rng, specgram = load_spectrogram(files, ds_mom, prof_time_idx, measured_var)
         if vel is not None and rng is not None and specgram is not None:
-            specgram, _ = convert_to_db_if_linear(spec_var, ds0, specgram)
+            specgram, _ = convert_to_db_if_linear(measured_var, ds0, specgram)
             measured_spectrum = specgram[range_idx, :]
             fig5 = go.Figure()
-            fig5.add_trace(
-                go.Scattergl(
-                    x=vel,
-                    y=measured_spectrum,
-                    mode="lines",
-                    name="Measured",
-                    line=dict(color="#1f77b4", width=2),
+            if show_measured:
+                fig5.add_trace(
+                    go.Scattergl(
+                        x=vel,
+                        y=measured_spectrum,
+                        mode="lines",
+                        name="Measured",
+                        line=dict(color="#1f77b4", width=2),
+                    )
                 )
-            )
+            else:
+                st.info("The selected files have no sLDR, so only the simulated LDR is shown.")
             center_height = float(range_values[range_idx])
             vel_bins = radar_simulator._centers_to_edges(vel)
-            if simulator_type == "Rain":
-                lutPath = lut_path_rain
-                sim_label = "Simulated (Rain)"
-            else:
-                lutPath = lut_path_snow
-                sim_label = "Simulated (Snow)"
-            vel_sim, sim_H, PSD, D, precip_rate = radar_simulator.simulate_spectrum(
+            lutPath = {
+                "Rain": lut_path_rain,
+                "Snow": lut_path_snow,
+                "Dry hail": lut_path_dry_hail,
+                "Wet hail": lut_path_wet_hail,
+            }[simulator_type]
+            sim_label = f"Simulated ({simulator_type})"
+            with xr.open_dataset(lutPath) as lut:
+                lut_has_cx = "c_bck_cx" in lut
+            # Without cross-polar data the Ze run still provides the PSD for panel 6.
+            show_sim = sim_quantity == "Ze" or lut_has_cx
+            if not show_sim:
+                st.info(f"The {simulator_type} LUT has no cross-polar data, so LDR cannot be simulated.")
+            vel_sim, sim_H, PSD, D, precip_rate, ldr_integrated = radar_simulator.simulate_spectrum(
                 vel_bins=vel_bins,
                 center_height=center_height,
                 eps_diss=eps_diss,
@@ -954,22 +972,30 @@ def main():
                 freq_ghz = freq_ghz,
                 prf = prf,
                 att = att,
+                output="LDR" if sim_quantity == "LDR" and show_sim else "Ze",
             )
             print(precip_rate)
-            fig5.add_trace(
-                go.Scattergl(
-                    x=vel_sim,
-                    y=sim_H,
-                    mode="lines",
-                    name=sim_label,
-                    line=dict(color="#d62728", width=2, dash="dash"),
+            if ldr_integrated is not None:
+                sim_label += f", LDR = {ldr_integrated:.1f} dB"
+            if show_sim:
+                fig5.add_trace(
+                    go.Scattergl(
+                        x=vel_sim,
+                        y=sim_H,
+                        mode="lines",
+                        name=sim_label,
+                        line=dict(color="#d62728", width=2, dash="dash"),
+                    )
                 )
-            )
             dark_gray = "#4d4d4d"
             grid_gray_major = "rgba(77,77,77,0.45)"
+            if sim_quantity == "LDR":
+                panel5_ylabel = "sLDR (dB)"
+            else:
+                panel5_ylabel = f"{spec_var} ({spectrum_unit})" if spectrum_unit else spec_var
             fig5.update_layout(
                 xaxis_title=f"Velocity ({units['velocity']})",
-                yaxis_title=f"{spec_var} ({spectrum_unit})" if spectrum_unit else spec_var,
+                yaxis_title=panel5_ylabel,
                 height=450,
                 margin=dict(l=20, r=20, t=40, b=20),
                 font=dict(size=20, color=dark_gray),
@@ -1183,11 +1209,13 @@ def main():
         # Panel 5: Measured & Simulated Spectrum
         if 'vel' in locals() and 'measured_spectrum' in locals() and 'vel_sim' in locals() and 'sim_H' in locals():
             ax5 = fig.add_subplot(gs[2, 0])
-            ax5.plot(vel, measured_spectrum, label="Measured")
-            ax5.plot(vel_sim, sim_H, label="Simulated", linestyle='--')
+            if show_measured:
+                ax5.plot(vel, measured_spectrum, label="Measured")
+            if show_sim:
+                ax5.plot(vel_sim, sim_H, label="Simulated", linestyle='--')
             ax5.set_title(f"Measured & Simulated Spectrum ({simulator_type})",fontsize=fontsize)
             ax5.set_xlabel("Velocity (m/s)",fontsize=fontsize)
-            ax5.set_ylabel(var,fontsize=fontsize)
+            ax5.set_ylabel(panel5_ylabel if sim_quantity == "LDR" else var,fontsize=fontsize)
             ax5.legend()
             ax5.tick_params(labelsize=fontsize-2)
             ax5.grid()

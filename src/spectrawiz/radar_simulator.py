@@ -118,7 +118,21 @@ def simulate_spectrum(
     att,
     K2=0.93,
     vertical_wind: float = 0.0,
+    output="Ze",
 ):
+    """
+    Forward-simulate one Doppler spectrum from a scattering LUT.
+
+    output="Ze" returns the co-polar spectrum in dB. output="LDR" returns sLDR in dB
+    instead, the ratio cross/co of two spectra that each get the same treatment
+    (attenuation, broadening, independent noise, no noise subtraction); this needs
+    c_bck_cx in the LUT.
+
+    Returns
+    -------
+    vel_centers, spectrum in dB, PSD, D, precip_rate, integrated LDR in dB
+    (None for output="Ze")
+    """
     vel_bins = np.asarray(vel_bins, dtype=float)
     nfft = len(vel_bins) - 1
     vel_centers = 0.5 * (vel_bins[:-1] + vel_bins[1:])
@@ -177,6 +191,8 @@ def simulate_spectrum(
     #print('D snow max', D.max())
     v_lut = -1 * np.asarray(v_lut, dtype=float).flatten() + float(vertical_wind)
     cbck = np.asarray(cbck, dtype=float).flatten()
+    if output == "LDR":
+        cbck_cx = np.asarray(_pick_var(lut, ["c_bck_cx"]).values, dtype=float).flatten()
     #print(D.max(),v_lut.max(),cbck.max())
 
     #PSD = float(N0) * np.exp(-float(lam) * D)
@@ -186,18 +202,7 @@ def simulate_spectrum(
     
     prefactor = wl ** 4 / (np.pi**5 * float(K2))
     dD_dv = np.abs(np.gradient(D) / np.gradient(v_lut))
-    sZeH_native = 1e18 * cbck * prefactor * PSD * dD_dv
 
-    da = xr.DataArray(sZeH_native, coords={"vel": v_lut}, dims=("vel",))
-    g = da.groupby_bins("vel", vel_bins, labels=vel_centers).mean()
-    spec_H = g.rename({"vel_bins": "vel"}).reindex(vel=vel_centers, fill_value=0.0).values
-    spec_H = g.rename({"vel_bins": "vel"}).fillna(0).values
-
-    # add attenuation
-    att_lin = 10.0 ** (float(att) / 10.0)
-    spec_H = spec_H / att_lin
-    #print('spec_H max', spec_H.max())
-    
     # Broadening + noise (same model as rain)
     time_int = nave*nfft/prf
     L_s = float(uwind) * float(time_int) + 2.0 * float(center_height) * np.sin(theta)
@@ -208,11 +213,30 @@ def simulate_spectrum(
     sigma_b2 = float(uwind) ** 2 * theta**2 / 2.76
     spec_broad = max(np.sqrt(abs(sigma_t2) + sigma_b2), 1e-4)
 
-    spec_H = _convolve_broad_fft(spec_H, vel_centers, spec_broad)
-    #print(f"[simulate_snow] spec_H after broadening range: {spec_H.min():.4e} to {spec_H.max():.4e}")
-    spec_H = _convolve_noise(spec_H, vel_centers, noise_pow, nave)
+    def channel_spectrum(c_bck):
+        sZe_native = 1e18 * c_bck * prefactor * PSD * dD_dv
+
+        da = xr.DataArray(sZe_native, coords={"vel": v_lut}, dims=("vel",))
+        g = da.groupby_bins("vel", vel_bins, labels=vel_centers).mean()
+        spec = g.rename({"vel_bins": "vel"}).reindex(vel=vel_centers, fill_value=0.0).values
+        spec = g.rename({"vel_bins": "vel"}).fillna(0).values
+
+        # add attenuation
+        att_lin = 10.0 ** (float(att) / 10.0)
+        spec = spec / att_lin
+
+        spec = _convolve_broad_fft(spec, vel_centers, spec_broad)
+        return _convolve_noise(spec, vel_centers, noise_pow, nave)
+
+    spec_H = channel_spectrum(cbck)
+    spec_out = _dB(spec_H)
+    ldr_integrated = None
+    if output == "LDR":
+        spec_cx = channel_spectrum(cbck_cx)
+        spec_out = _dB(spec_cx) - _dB(spec_H)
+        ldr_integrated = float(_dB(spec_cx.sum()) - _dB(spec_H.sum()))
 
     precip_rate = precipitation_rate_from_psd(D, PSD, v_lut, mass)
     #print(D)
     
-    return vel_centers, _dB(spec_H), PSD, D, precip_rate
+    return vel_centers, spec_out, PSD, D, precip_rate, ldr_integrated

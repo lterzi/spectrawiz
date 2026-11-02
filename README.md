@@ -13,16 +13,17 @@ It is designed for atmospheric radar scientists and engineers, providing both a 
 ### 1. **Interactive Explorer (Streamlit App)**
 - Visualize radar time-height data, Doppler spectra, and profiles.
 - Select variables, time, and range interactively.
-- Overlay measured and forward-simulated spectra (rain/snow) for direct comparison.
+- Overlay measured and forward-simulated spectra (rain/snow/hail) for direct comparison.
 - Control simulation parameters (rain rate, snow parameters, gamma DSD, turbulence, noise, wind, etc.) with intuitive sliders.
 - View and compare simulated Particle Size Distributions (PSD).
-- Flexible LUT (lookup table) selection for rain and snow scattering.
+- Flexible LUT (lookup table) selection for rain, snow, dry hail and wet hail scattering.
 - All figures update in real time as you adjust parameters.
 
 ### 2. **Forward Spectrum Simulation**
-- Simulate Doppler spectra for rain and snow using a generalized gamma drop size distribution (DSD).
+- Simulate Doppler spectra for rain, snow and hail using a generalized gamma drop size distribution (DSD).
 - User control over DSD parameters: N₀, λ (lambda), γ (gamma).
-- Supports both rain and snow LUTs for scattering properties.
+- Supports rain, snow, dry hail and wet hail LUTs for scattering properties. The hail LUTs (9.6 and 35.6 GHz) come from `hail_tmatrix_ldr.py --lut` in the hailscattering project.
+- Simulate Ze or sLDR ("Simulated quantity"). sLDR needs cross-polar data, which only the hail LUTs have; both channels get the same attenuation, broadening and independent noise, with no noise subtraction.
 - Adjustable turbulence, wind, noise, and radar beam width.
 - Compare simulated and measured spectra side-by-side.
 
