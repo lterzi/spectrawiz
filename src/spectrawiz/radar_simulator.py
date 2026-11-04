@@ -22,7 +22,7 @@ def _marshall_palmer(D_mm, R):
     return N0 * np.exp(-lam * np.asarray(D_mm, dtype=float))
 
 def _gamma_dsd(D_mm, N0, lam, gamma):
-    """Generalized gamma DSD: N(D) = N0 * D^gamma * exp(-lam*D), D in mm."""
+    """Generalized gamma DSD: N(D) = N0 * D^gamma * exp(-lam*D), D in m, lam in m^-1, N0 in m^-3 m^-(1+gamma)."""
     return N0 * (D_mm ** gamma) * np.exp(-lam * D_mm)
 
 def _convolve_broad_fft(spec, vel, spec_broad):
@@ -73,9 +73,9 @@ def precipitation_rate_from_psd(D_mm, PSD, v_fall, mass):
     Parameters
     ----------
     D_mm : array-like
-        Particle diameter / maximum dimension in mm.
+        Particle diameter / maximum dimension in m (despite the argument name).
     PSD : array-like
-        N(D) in m^-3 mm^-1.
+        N(D) in m^-3 m^-1.
     v_fall : array-like
         Terminal fall velocities in m/s (positive downward).
     mass : array-like
@@ -168,8 +168,9 @@ def simulate_spectrum(
     try:
         v_lut = _pick_var(lut, ["vel", "velocity"]).values
     except KeyError as e:
-        av, bv = 6.18, -0.6
-        v_lut = av * np.exp(bv * D*1e3) #+ float(vertical_wind)
+        # Atlas-type rain fall speed, coefficients from Seifert et al. (2013, GMDD 6, 5077), D in m
+        ar, br, cr = 9.292, 9.623, 622.2
+        v_lut = ar - br * np.exp(-cr * D) #+ float(vertical_wind)
         #raise RuntimeError(f"Missing required LUT variable: {e}")
     try:
         cbck = _pick_var(lut, ["Cbck", "c_bck_h", "radarXSh[mm2]"]).values
