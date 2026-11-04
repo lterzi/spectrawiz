@@ -10,16 +10,17 @@ authors = [
     { name = "Leonie von Terzi" }
 ]
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.11"
 dependencies = [
-    "streamlit",
-    "xarray",
-    "matplotlib",
-    "numpy",
-    "pandas",
-    "netcdf4",
-    "scipy",
-    "plotly"
+    "streamlit==1.55.0",
+    "xarray==2026.2.0",
+    "matplotlib==3.10.8",
+    "numpy==2.4.4",
+    "pandas==2.3.3",
+    "netcdf4==1.7.4",
+    "scipy==1.17.1",
+    "plotly==6.6.0",
+    "astropy==8.0.0"
 ]
 
 [project.scripts]

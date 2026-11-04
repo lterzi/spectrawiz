@@ -16,7 +16,7 @@ from plotly.subplots import make_subplots
 
 def mpl_to_plotly(cmap_name, n=255):
     """Convert a Matplotlib colormap to Plotly colorscale."""
-    cmap = matplotlib.cm.get_cmap(cmap_name, n)
+    cmap = matplotlib.colormaps[cmap_name].resampled(n)
     colorscale = []
     for i in range(cmap.N):
         rgba = cmap(i)
