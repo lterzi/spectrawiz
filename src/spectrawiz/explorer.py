@@ -3,6 +3,7 @@ import xarray as xr
 import numpy as np
 import glob
 import os
+import re
 import pandas as pd
 from spectrawiz import radar_simulator
 import plotly.graph_objects as go
@@ -191,6 +192,50 @@ def main():
     time_labels = _unique_labels([pd.to_datetime(t).strftime('%Y-%m-%d %H:%M:%S') for t in time_values])
     range_labels = _unique_labels([f"{r:.1f} {units['range']}" for r in range_values])
 
+    # Typed time/range: jump to the nearest step and move the slider along with it.
+    # These run as on_change callbacks, i.e. before the sliders are created in the rerun.
+    def _select_step(name, idx):
+        st.session_state[f"{name}_idx"] = idx
+        st.session_state[f"{name}_slider"] = idx
+
+    def _go_to_time():
+        text = st.session_state["time_text"].strip()
+        times = pd.to_datetime(np.asarray(time_values))
+        try:
+            if re.fullmatch(r"\d{4}-\d{2}-\d{2}([ T].+)?", text):
+                target = pd.Timestamp(text)
+            elif re.fullmatch(r"\d{1,2}:\d{2}(:\d{2}(\.\d+)?)?", text):
+                # No date given: stay on the date of the selected time
+                target = pd.Timestamp(f"{times[st.session_state.time_idx].date()} {text}")
+            else:
+                raise ValueError(text)
+            idx = int(np.abs(times - target).argmin())
+        except (ValueError, TypeError):
+            st.session_state["time_text_msg"] = ("error", f"Could not read time '{text}'. Use HH:MM:SS or YYYY-MM-DD HH:MM:SS.")
+            return
+        _select_step("time", idx)
+        if target < times.min() or target > times.max():
+            st.session_state["time_text_msg"] = ("warning", f"{text} is outside the data, using the closest time.")
+
+    def _go_to_range():
+        text = st.session_state["range_text"].strip()
+        ranges = np.asarray(range_values, dtype=float)
+        try:
+            target = float(text.removesuffix(str(units["range"])).strip())
+            if not np.isfinite(target):
+                raise ValueError(text)
+        except ValueError:
+            st.session_state["range_text_msg"] = ("error", f"Could not read range '{text}'. Enter a number in {units['range']}.")
+            return
+        _select_step("range", int(np.abs(ranges - target).argmin()))
+        if target < ranges.min() or target > ranges.max():
+            st.session_state["range_text_msg"] = ("warning", f"{text} is outside the data, using the closest range.")
+
+    def _show_text_msg(key):
+        msg = st.session_state.pop(key, None)
+        if msg:
+            getattr(st.sidebar, msg[0])(msg[1])
+
     st.sidebar.markdown("**Time**")
     t_col1, t_col2, t_col3 = st.sidebar.columns([1, 8, 1], vertical_alignment="center")
     with t_col1:
@@ -212,6 +257,9 @@ def main():
             key="time_slider",
         )
     st.session_state.time_idx = time_idx
+    st.session_state["time_text"] = pd.to_datetime(time_values[time_idx]).strftime('%Y-%m-%d %H:%M:%S')
+    st.sidebar.text_input("Type time (HH:MM:SS or YYYY-MM-DD HH:MM:SS)", key="time_text", on_change=_go_to_time)
+    _show_text_msg("time_text_msg")
 
     st.sidebar.markdown("**Range**")
     r_col1, r_col2, r_col3 = st.sidebar.columns([1, 8, 1], vertical_alignment="center")
@@ -234,6 +282,9 @@ def main():
             key="range_slider",
         )
     st.session_state.range_idx = range_idx
+    st.session_state["range_text"] = f"{range_values[range_idx]:.1f} {units['range']}"
+    st.sidebar.text_input(f"Type range [{units['range']}]", key="range_text", on_change=_go_to_range)
+    _show_text_msg("range_text_msg")
 
     prof_time_idx = time_idx
 
@@ -271,7 +322,7 @@ def main():
         )
 
         panel3_xlimits = st.text_input("Panel 3 X-axis limits (e.g. -10,10)", "", key="panel3_xlimits")
-        panel3_ylimits = st.text_input("Panel 3 Y-axis limits (e.g. 0,3000)", "", key="panel3_ylimits")
+        panel3_ylimits = st.text_input("Panel 2 & 3 Y-axis limits (e.g. 0,3000)", "", key="panel3_ylimits")
         selected_cmap_panel3 = st.selectbox(
             "Colormap",
             options=mpl_cmaps,
@@ -353,9 +404,9 @@ def main():
         log_lam = st.slider("log₁₀(lambda) [m⁻¹]", min_value=1.0, max_value=7.0, value=3.0, step=0.01)
         lam = 10 ** log_lam
         st.write(f"lambda = {lam:.2f} m⁻¹")
-        log_N0 = st.slider("log₁₀(N0) [m⁻³ mm⁻¹]", min_value=0.0, max_value=10.0, value=4.0, step=0.05)
+        log_N0 = st.slider("log₁₀(N0) [m⁻³ m⁻¹⁻ᵞ]", min_value=0.0, max_value=10.0, value=4.0, step=0.05)
         N0 = 10 ** log_N0
-        st.write(f"N0 = {N0:.2e} m⁻³ mm⁻¹")
+        st.write(f"N0 = {N0:.2e} m⁻³ m⁻¹⁻ᵞ")
         att = st.slider("Attenuation [dB/km]", min_value=0.0, max_value=20.0, value=0.0, step=0.5)
         log_eps = st.slider("log₁₀(Eddy_diss_rate)", min_value=-5.0, max_value=-2.0, value=-3.0, step=0.1)
         eps_diss = 10 ** log_eps
@@ -1109,6 +1160,17 @@ def main():
             showarrow=False,
             font=dict(size=20, color="#4d4d4d"),
         )
+        fig6.add_annotation(
+            text="N(D) = N<sub>0</sub> D<sup>γ</sup> exp(−λD)",
+            x=0.98,
+            xref="paper",
+            y=0.87,
+            yref="paper",
+            xanchor="right",
+            yanchor="top",
+            showarrow=False,
+            font=dict(size=20, color="#4d4d4d"),
+        )
         fig6.update_xaxes(
             showgrid=True,
             gridcolor=grid_gray_major,
@@ -1225,6 +1287,8 @@ def main():
             ax6 = fig.add_subplot(gs[2, 1])
             ax6.plot(D, PSD)
             ax6.set_title("Simulated PSD",fontsize=fontsize)
+            ax6.text(0.04, 0.05, r"$N(D) = N_0\,D^{\gamma}\,\exp(-\lambda D)$", transform=ax6.transAxes,
+                     ha="left", va="bottom", fontsize=fontsize-2)
             ax6.set_xlabel("Diameter D [m]",fontsize=fontsize)
             ax6.set_ylabel("PSD",fontsize=fontsize)
             ax6.set_xscale("log")
@@ -1249,7 +1313,7 @@ def main():
     st.markdown("""
     ---
     **Tips:**
-    - Use the sliders to select time/range for all panels.
+    - Use the sliders, or type a value in the boxes below them, to select time/range for all panels.
     - Panel 1 shows the time-range variable (e.g. reflectivity) with the selected point highlighted.
     - Panel 2 shows the vertical profile at the selected time.
     - Panel 3 shows the spectrogram at the selected time, with the selected range highlighted.
